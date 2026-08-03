@@ -1,39 +1,67 @@
-# Core Concept
+# Enterprise URL Shortener Platform
 
-A URL Shortener is a service that translates long, complex URLs into short, clean aliases (slugs) to make them easier to share and track.
+> High-throughput microservice-based link management and real-time click analytics platform engineered for enterprise brand marketing and instant URL redirection.
 
-### How it works:
-*   **Generation (Write Path)**: A user submits a long URL. The system generates a unique slug (e.g., Base62 encoding of an auto-incrementing ID or hash), saves the mapping in the database, and returns the shortened URL.
-*   **Redirection (Read Path)**: When a user visits the short URL, the gateway performs a fast lookup (caching the mapping in memory/Redis to minimize database load) and returns an HTTP `302 Found` (or `301 Moved Permanently`) redirect to the original URL.
-*   **Analytics (Async Path)**: While redirecting, the system triggers a background tracking event (e.g., via a message queue like Kafka) to log click information and compile reports without delaying the redirect.
+![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-7.0+-DC382D?style=flat&logo=redis&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)
+![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-3.0+-231F20?style=flat&logo=apachekafka&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-1.5+-844FBA?style=flat&logo=terraform&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Enabled-2496ED?style=flat&logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-> A simple flow showing how the URL shortener operates: creating a short link, redirecting visitors, and collecting click stats.
+---
+
+## 1. Core Purpose & Business Value
+
+Enterprise URL Shortener Platform converts long, complex web links into concise, memorable brand assets while delivering real-time marketing intelligence and sub-millisecond redirection reliability.
+
+- **Brand Recognition & Click-Through Optimization**: Transforms awkward web addresses into clean, trustworthy branded short links, dramatically improving click-through rates across marketing channels.
+- **Real-Time Customer Campaign Intelligence**: Captures visitor engagement metrics, geographical reach, and channel performance immediately to optimize ad spend.
+- **Enterprise High-Availability SLA**: Guarantees zero-downtime redirection performance for high-volume customer traffic spikes and seasonal promotions.
+- **Security & Account Control**: Enforces precise organizational access controls, protecting enterprise links from unauthorized alterations or malicious hijacks.
+
+---
+
+## 2. System Architecture & Technical Execution
+
+### Core Concept & Phased Execution Diagram
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Visitor as Visitor / User
-    participant S as URL Shortener
-    participant A as Click Analytics
+    participant S as URL Shortener Gateway
+    participant A as Click Analytics Service
 
-    Note over Visitor, S: Phase 1: Shorten URL
-    Visitor->>S: Submit Long URL (e.g., https://example.com/very-long-path?id=123)
+    Note over Visitor, S: Phase 1: Shorten URL (Generation Path)
+    Visitor->>S: Submit Long URL (POST /shorten)
     S-->>Visitor: Return Branded Short URL (e.g., https://shrt.co/xYz9b)
 
-    Note over Visitor, S: Phase 2: Access & Tracking
-    Visitor->>S: Click Short URL (https://shrt.co/xYz9b)
-    S-->>Visitor: HTTP 302 Redirect (Location: https://example.com/very-long-path?id=123)
+    Note over Visitor, S: Phase 2: Access & Redirection (Read Path)
+    Visitor->>S: Click Short URL (GET /r/xYz9b)
+    alt Cache Hit / Valid Mapping
+        rect rgb(235, 247, 238)
+            S-->>Visitor: HTTP 302 Redirect (Location: https://example.com/target)
+        end
+    else Cache Miss / DB Fallback
+        rect rgb(255, 243, 205)
+            S->>S: Fetch from Database & Warm Cache
+            S-->>Visitor: HTTP 302 Redirect
+        end
+    else Link Not Found
+        rect rgb(253, 237, 237)
+            S-->>Visitor: HTTP 404 Not Found
+        end
+    end
     
-    Note over S, A: Asynchronous Tracking (Background)
-    S-)+A: Capture click event (stats count +1)
+    Note over S, A: Phase 3: Asynchronous Tracking (Background Path)
+    S-)+A: Capture click event via Queue (stats count +1)
     deactivate A
 ```
 
----
-
-# High-Level Architecture
-
-> This diagram shows the **target production design**
+### High-Level Target Production Architecture Diagram
 
 ```mermaid
 ---
@@ -49,26 +77,26 @@ flowchart TB
 
     subgraph Edge
         CDN["CDN<br/>(Cloudflare / AWS CloudFront)"]
-        LB["Load balancer<br/>(Nginx / HAProxy)"]
+        LB["Load Balancer<br/>(Nginx / HAProxy)"]
     end
 
     subgraph WritePath["Write Path"]
-        APIGW["API gateway<br/>(FastAPI)"]
+        APIGW["API Gateway<br/>(FastAPI)"]
     end
 
     subgraph ReadPath["Read Path"]
-        Redirect["API gateway<br/>(FastAPI)"]
+        Redirect["API Gateway<br/>(FastAPI)"]
     end
 
     subgraph AuthSvc["Auth Service"]
-        Auth["Auth handler<br/>(RS256 Private Key)"]
+        Auth["Auth Handler<br/>(RS256 Private Key)"]
         subgraph AuthDB["Owned Storage"]
             UserDB[("User DB<br/>(PostgreSQL)")]
         end
     end
 
     subgraph ShortenerSvc["Shortener Service"]
-        Shortener["Shortener handler<br/>(FastAPI + Uvicorn )"]
+        Shortener["Shortener Handler<br/>(FastAPI + Uvicorn)"]
         subgraph ShortenerDB["Owned Storage"]
             Redis["Cache<br/>(Redis)"]
             Primary[("Primary DB<br/>(PostgreSQL)")]
@@ -78,7 +106,7 @@ flowchart TB
 
     subgraph Async
         Queue["Queue<br/>(Kafka / RabbitMQ / SQS)"]
-        Analytics["Analytics service<br/>(ClickHouse / Elasticsearch)"]
+        Analytics["Analytics Service<br/>(ClickHouse / Elasticsearch)"]
     end
 
     User --> APIGW
@@ -102,11 +130,7 @@ flowchart TB
     Queue --> Analytics
 ```
 
----
-
-# Container Design
-
-> Shows the **running containers**, which communicate only over the internal Docker bridge network, and what is exposed to the outside world.
+### Container Network & Isolation Design Diagram
 
 ```mermaid
 ---
@@ -181,4 +205,42 @@ flowchart TB
     LoginH -->|"SET refresh_token:{token}"| TokenStore
     RefreshH -->|"GET refresh_token:{token}"| TokenStore
     LogoutH -->|"DEL refresh_token:{token}"| TokenStore
+```
+
+---
+
+## 3. Repository Structure
+
+```text
+URL-Shortener/
+├── .agents/          # Workspace configuration and guidelines
+├── design/           # Architecture diagrams and design specifications
+│   ├── analytics/    # Analytics service design documentation
+│   ├── auth/         # Authentication service design documentation
+│   └── shortener/    # Shortener service design documentation
+├── infra_tf/         # Infrastructure as Code (Terraform)
+│   ├── apps.tf       # Application workloads deployment
+│   ├── dbs.tf        # Databases & cache cluster setup
+│   ├── main.tf       # Terraform provider configuration
+│   ├── outputs.tf    # Infrastructure output definitions
+│   └── variables.tf  # Environment variable declarations
+├── keys/             # RSA public/private keys for JWT verification
+├── scripts/          # Automation build and deployment scripts
+│   ├── 01_build_images.sh
+│   ├── 02_deploy_tf.sh
+│   ├── 03_run_tests.sh
+│   └── run_test_k8s.sh
+├── services/         # Decoupled microservices architecture
+│   ├── analytics/    # Real-time click tracking & aggregation
+│   ├── auth/         # JWT authentication & user management
+│   ├── gateway/      # Reverse proxy & dynamic request router
+│   └── shortener/    # URL encoding, decoding & cache layer
+├── tests/            # Automated test suites
+│   ├── e2e/          # End-to-end user journey tests
+│   ├── integration/  # Inter-service integration tests
+│   └── unit/         # Unit tests per microservice
+├── .dockerignore
+├── .gitignore
+├── pyproject.toml    # Dependency management & pytest config
+└── uv.lock           # Locked dependency lockfile
 ```
