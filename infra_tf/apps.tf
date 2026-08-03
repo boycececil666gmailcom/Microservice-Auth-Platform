@@ -45,23 +45,20 @@ resource "kubernetes_deployment" "gateway" {
             }
           }
 
+          env {
+            name = "JWT_PUBLIC_KEY"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.jwt_public_key.metadata[0].name
+                key  = "public_key.pem"
+              }
+            }
+          }
+
           env_from {
             config_map_ref {
               name = kubernetes_config_map.app_config.metadata[0].name
             }
-          }
-
-          volume_mount {
-            name       = "jwt-public-key"
-            mount_path = "/etc/jwt-keys"
-            read_only  = true
-          }
-        }
-
-        volume {
-          name = "jwt-public-key"
-          secret {
-            secret_name = kubernetes_secret.jwt_public_key.metadata[0].name
           }
         }
       }
@@ -136,26 +133,21 @@ resource "kubernetes_deployment" "auth" {
           }
 
           env {
-            name = "DB_PASSWORD"
+            name  = "DATABASE_URL"
+            value = var.auth_db_url
+          }
+
+          env {
+            name  = "REDIS_URL"
+            value = var.auth_redis_url
+          }
+
+          env {
+            name = "JWT_PRIVATE_KEY"
             value_from {
               secret_key_ref {
-                name = "postgres.auth-db.credentials.postgresql.acid.zalan.do"
-                key  = "password"
-              }
-            }
-          }
-
-          env {
-            name  = "DATABASE_URL"
-            value = "postgresql://postgres:$(DB_PASSWORD)@auth-db:5432/auth"
-          }
-
-          env {
-            name = "REDIS_URL"
-            value_from {
-              config_map_key_ref {
-                name = kubernetes_config_map.app_config.metadata[0].name
-                key  = "AUTH_REDIS_URL"
+                name = kubernetes_secret.jwt_private_key.metadata[0].name
+                key  = "private_key.pem"
               }
             }
           }
@@ -164,19 +156,6 @@ resource "kubernetes_deployment" "auth" {
             config_map_ref {
               name = kubernetes_config_map.app_config.metadata[0].name
             }
-          }
-
-          volume_mount {
-            name       = "jwt-private-key"
-            mount_path = "/etc/jwt-keys"
-            read_only  = true
-          }
-        }
-
-        volume {
-          name = "jwt-private-key"
-          secret {
-            secret_name = kubernetes_secret.jwt_private_key.metadata[0].name
           }
         }
       }
@@ -251,28 +230,13 @@ resource "kubernetes_deployment" "shortener" {
           }
 
           env {
-            name = "DB_PASSWORD"
-            value_from {
-              secret_key_ref {
-                name = "postgres.shortener-db.credentials.postgresql.acid.zalan.do"
-                key  = "password"
-              }
-            }
-          }
-
-          env {
             name  = "DATABASE_URL"
-            value = "postgresql://postgres:$(DB_PASSWORD)@shortener-db:5432/urlshortener"
+            value = var.shortener_db_url
           }
 
           env {
-            name = "REDIS_URL"
-            value_from {
-              config_map_key_ref {
-                name = kubernetes_config_map.app_config.metadata[0].name
-                key  = "SHORTENER_REDIS_URL"
-              }
-            }
+            name  = "REDIS_URL"
+            value = var.shortener_redis_url
           }
 
           env_from {

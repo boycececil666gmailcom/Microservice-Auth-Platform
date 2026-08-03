@@ -12,7 +12,6 @@ No business logic lives here.
 
 import os
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 import httpx
 import jwt
@@ -26,20 +25,11 @@ AUTH_URL = os.environ.get("AUTH_URL", "http://auth:8002")
 ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "http://analytics:8003")
 
 # ── RS256 Public Key (used to VERIFY tokens — cannot sign) ────────────────────
-# Load from file path (preferred) or inline PEM string (k8s secret injection).
 JWT_ALGORITHM = "RS256"
+JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY")
 
-_public_key_path = os.environ.get("JWT_PUBLIC_KEY_PATH")
-_public_key_inline = os.environ.get("JWT_PUBLIC_KEY")
-
-if _public_key_path:
-    JWT_PUBLIC_KEY = Path(_public_key_path).read_text()
-elif _public_key_inline:
-    JWT_PUBLIC_KEY = _public_key_inline
-else:
-    raise RuntimeError(
-        "Gateway requires JWT_PUBLIC_KEY_PATH or JWT_PUBLIC_KEY env var"
-    )
+if not JWT_PUBLIC_KEY:
+    raise RuntimeError("Gateway requires JWT_PUBLIC_KEY env var")
 
 
 # ── Shared async httpx client ─────────────────────────────────────────────────

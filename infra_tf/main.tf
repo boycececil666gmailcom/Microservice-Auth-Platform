@@ -38,8 +38,6 @@ resource "kubernetes_config_map" "app_config" {
     CACHE_TTL_SECONDS         = "86400"
     JWT_EXPIRATION_MINUTES    = "15"
     REFRESH_TOKEN_TTL_SECONDS = "2592000"
-    JWT_PRIVATE_KEY_PATH      = "/etc/jwt-keys/private_key.pem"
-    JWT_PUBLIC_KEY_PATH       = "/etc/jwt-keys/public_key.pem"
   }
 }
 
