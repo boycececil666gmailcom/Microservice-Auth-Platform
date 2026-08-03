@@ -1,6 +1,6 @@
 # Auth Service Design
 
-This document details the authentication flows using the **Short-Lived Access Token + Long-Lived Refresh Token** pattern for both Password and Google OIDC authentication.
+This document details the authentication flows using the **Short-Lived Access Token + Long-Lived Refresh Token** pattern with a **Single Universal RS256 JWT Schema** (`sub = email`) for both Password and Google OIDC authentication.
 
 ## 1a. Email Password Sign Up / Login & Token Issuance Flow
 
@@ -18,21 +18,21 @@ sequenceDiagram
     
     alt User DOES NOT exist (Sign Up)
         A->>A: Hash password with bcrypt (SLOW)
-        A->>PG: INSERT INTO users {username=email, password_hash, sso_provider='local'}
-        PG-->>A: Return new user_id
+        A->>PG: INSERT INTO users {email, password_hash, sso_provider='local'}
+        PG-->>A: Return user record (email)
     else User DOES exist (Login)
-        PG-->>A: Return existing User Hash & sso_provider
-        A->>A: Verify password against Hash (SLOW)
+        PG-->>A: Return user record (password_hash & sso_provider)
+        A->>A: Verify password against Hash (bcrypt)
         alt Password Incorrect
             A-->>G: 401 Unauthorized
             G-->>C: 401 Unauthorized (Stop)
         end
     end
     
-    A->>A: Generate Consolidated Access Token (JWT sub, email, sso_provider='local', exp: 15m)
-    A->>A: Generate Refresh Token (Opaque string)
+    A->>A: Generate Universal RS256 JWT (sub: email, email: email, sso_provider='local', exp: 15m)
+    A->>A: Generate Refresh Token (Opaque 48-char string)
     
-    A->>R: SET refresh_token:{token} = user_id EX 30d
+    A->>R: SET refresh_token:{token} = email EX 30d
     
     A-->>G: 200 OK
     Note over A,G: Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
@@ -72,18 +72,18 @@ sequenceDiagram
     A->>PG: Fetch user by google_sub OR email
 
     alt User DOES NOT exist
-        A->>PG: INSERT INTO users {username=email, sso_provider='google_oidc', google_sub}
+        A->>PG: INSERT INTO users {email, sso_provider='google_oidc', google_sub}
         PG-->>A: Return user record (email)
     else User DOES exist
         PG-->>A: Return user record (email)
     end
 
-    A->>A: Generate Consolidated Access Token (JWT sub, email, sso_provider='google_oidc', exp: 15m)
-    A->>A: Generate Refresh Token (Opaque string)
-    A->>R: SET refresh_token:{token} = user_id EX 30d
+    A->>A: Generate Universal RS256 JWT (sub: email, email: email, sso_provider='google_oidc', exp: 15m)
+    A->>A: Generate Refresh Token (Opaque 48-char string)
+    A->>R: SET refresh_token:{token} = email EX 30d
 
     A-->>G: 200 OK
-    Note over A,G: Consolidated RS256 JWT Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
+    Note over A,G: Universal RS256 JWT Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
     G-->>C: 200 OK
 ```
 
@@ -104,13 +104,13 @@ sequenceDiagram
 
     Note over C,S: --- 1. Standard Request Attempt ---
     C->>G: POST /api/v1/shorten
-    Note right of C: Header: Authorization: Bearer <Consolidated_JWT>
+    Note right of C: Header: Authorization: Bearer <Universal_JWT>
     
-    G->>G: Verify JWT Signature (using RSA Public Key)
+    G->>G: Verify RS256 JWT Signature (in-memory using RSA Public Key)
     
     alt Token is Valid
         G->>S: Forward to Shortener
-        Note right of G: Add Header: X-User-ID: <sub_from_jwt>
+        Note right of G: Add Header: X-User-ID: <sub_from_jwt (email)>
         S-->>G: 201 Created
         G-->>C: 201 Created (Success!)
         
@@ -130,16 +130,16 @@ sequenceDiagram
             G-->>C: 401 Unauthorized (Must login again)
             
         else Refresh Token Valid
-            R-->>A: Return user_id
-            A->>PG: Fetch user email & sso_provider by user_id
-            PG-->>A: Return user details (Active)
-            A->>A: Generate NEW Consolidated Access Token (JWT sub, email, sso_provider, 15m)
+            R-->>A: Return email
+            A->>PG: Check if email exists in DB
+            PG-->>A: User exists & Active
+            A->>A: Generate NEW Universal RS256 JWT (sub: email, email: email, sso_provider, 15m)
             A-->>G: 200 OK {access_token: "..."}
             G-->>C: 200 OK
             
             Note over C,S: --- 3. Retry Original Request ---
             C->>G: POST /api/v1/shorten (retry)
-            Note right of C: Header: Authorization: Bearer <NEW_CONSOLIDATED_JWT>
+            Note right of C: Header: Authorization: Bearer <NEW_UNIVERSAL_JWT>
             G->>G: Verify NEW JWT Signature
             G->>S: Forward to Shortener
             S-->>G: 201 Created
@@ -152,7 +152,7 @@ sequenceDiagram
 
 ## 3. Logout / Revocation Flow
 
-When the user logs out, we immediately delete the Refresh Token from Redis.
+When the user logs out, we immediately delete the Refresh Token key from Redis.
 
 ```mermaid
 sequenceDiagram
