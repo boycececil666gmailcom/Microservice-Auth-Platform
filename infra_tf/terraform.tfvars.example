@@ -1,0 +1,17 @@
+# ── Google OpenID Connect (OIDC) Credentials ──────────────────────────────────
+google_client_id     = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
+google_client_secret = "YOUR_GOOGLE_CLIENT_SECRET"
+google_redirect_uri  = "http://localhost/auth/google/callback"
+
+# ── RSA Key Pair (PEM Format Multiline Strings) ──────────────────────────────
+rsa_private_key_pem = <<EOF
+-----BEGIN PRIVATE KEY-----
+YOUR_RSA_PRIVATE_KEY_PEM_CONTENT_HERE
+-----END PRIVATE KEY-----
+EOF
+
+rsa_public_key_pem = <<EOF
+-----BEGIN PUBLIC KEY-----
+YOUR_RSA_PUBLIC_KEY_PEM_CONTENT_HERE
+-----END PUBLIC KEY-----
+EOF

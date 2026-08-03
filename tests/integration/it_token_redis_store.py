@@ -30,27 +30,27 @@ def test_refresh_token_generation_entropy():
 
 
 def test_redis_store_and_lookup_workflow(mock_redis_store):
-    """Verify integration workflow of storing user_id against refresh token in Redis."""
+    """Verify integration workflow of storing user email against refresh token in Redis."""
     # Arrange
-    user_id = 101
+    test_email = "alice@example.com"
     token = generate_opaque_refresh_token()
     key = format_redis_token_key(token)
 
     # Act - Store in Redis
-    mock_redis_store[key] = str(user_id)
+    mock_redis_store[key] = test_email
 
     # Assert - Lookup from Redis
-    retrieved_id = mock_redis_store.get(key)
-    assert retrieved_id == "101"
+    retrieved_email = mock_redis_store.get(key)
+    assert retrieved_email == "alice@example.com"
 
 
 def test_redis_token_revocation_workflow(mock_redis_store):
     """Verify integration workflow of revoking refresh token on logout."""
     # Arrange
-    user_id = 101
+    test_email = "alice@example.com"
     token = generate_opaque_refresh_token()
     key = format_redis_token_key(token)
-    mock_redis_store[key] = str(user_id)
+    mock_redis_store[key] = test_email
 
     # Act - Revoke / Delete from Redis
     mock_redis_store.pop(key, None)

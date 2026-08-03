@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 #region Password Authentication Schemas
 class LoginRequest(BaseModel):
-    user: str
+    email: str
     password: str
 
 
@@ -18,5 +18,9 @@ class TokenResponse(BaseModel):
 
 #region Google OIDC Schemas
 class GoogleCallbackRequest(BaseModel):
-    id_token: str
+    id_token: str | None = None
+    code: str | None = None
+    state: str | None = None
+    redirect_uri: str | None = None
 #endregion
+

@@ -12,14 +12,10 @@ WORKDIR /app
 
 # ── Install dependencies (layer-cache friendly) ───────────────────────────────
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN uv sync --no-dev
 
 # ── Copy application source ───────────────────────────────────────────────────
 COPY services/gateway/ ./gateway/
-
-# ── Copy RSA public key (dev default — override via k8s secret mount) ─────────
-COPY keys/public_key.pem /app/keys/public_key.pem
-ENV JWT_PUBLIC_KEY_PATH=/app/keys/public_key.pem
 
 # ── Run the server ────────────────────────────────────────────────────────────
 CMD ["uv", "run", "uvicorn", "gateway.main:app", \

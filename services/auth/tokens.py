@@ -6,19 +6,14 @@ import jwt
 import redis.asyncio as aioredis
 
 
-#region Configuration & Keys
-JWT_ALGORITHM = "RS256"
-JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "15"))
-JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY")
+from .config import (
+    JWT_ALGORITHM,
+    JWT_EXPIRATION_MINUTES,
+    JWT_PRIVATE_KEY,
+    REDIS_URL,
+    REFRESH_TOKEN_TTL_SECONDS,
+)
 
-if not JWT_PRIVATE_KEY:
-    raise RuntimeError("Auth service requires JWT_PRIVATE_KEY env var")
-
-REDIS_URL = os.environ["REDIS_URL"]
-
-# Refresh tokens expire after 30 days.
-REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("REFRESH_TOKEN_TTL_SECONDS", str(60 * 60 * 24 * 30)))
-#endregion
 
 
 #region Redis Connection Pool
@@ -39,10 +34,12 @@ async def close_redis_pool() -> None:
 
 
 #region Access Token & Refresh Token Management
-def create_access_token(user_id: int) -> str:
-    """Create a signed JWT access token with a 15-minute expiration."""
+def create_access_token(email: str, sso_provider: str = "local") -> str:
+    """Create a signed RS256 JWT access token with single universal OIDC schema."""
     payload = {
-        "sub": str(user_id),
+        "sub": email,
+        "email": email,
+        "sso_provider": sso_provider,
         "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION_MINUTES),
         "iat": datetime.now(timezone.utc),
     }
@@ -59,24 +56,22 @@ def _token_key(token: str) -> str:
     return f"refresh_token:{token}"
 
 
-async def store_refresh_token(token: str, user_id: int) -> None:
-    """Store a refresh token in Redis with a 30-day TTL."""
+async def store_refresh_token(token: str, email: str) -> None:
+    """Store a refresh token in Redis mapped to user email with a 30-day TTL."""
     await redis_pool.set(
         _token_key(token),
-        str(user_id),
+        email,
         ex=REFRESH_TOKEN_TTL_SECONDS,
     )
 
 
-async def get_user_id_by_token(token: str) -> int | None:
-    """Look up the user_id associated with a refresh token.
+async def get_email_by_token(token: str) -> str | None:
+    """Look up the email associated with a refresh token.
 
     Returns None if the token is expired or does not exist.
     """
-    user_id = await redis_pool.get(_token_key(token))
-    if user_id is None:
-        return None
-    return int(user_id)
+    return await redis_pool.get(_token_key(token))
+
 
 
 async def delete_refresh_token(token: str) -> None:

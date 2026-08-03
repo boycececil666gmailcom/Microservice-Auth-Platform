@@ -20,7 +20,7 @@ def http_session():
 def user_credentials():
     """Generate unique user credentials for the test module."""
     return {
-        "user": f"testuser_{uuid.uuid4()}",
+        "email": f"testuser_{uuid.uuid4().hex[:8]}@example.com",
         "password": "testpassword123",
     }
 

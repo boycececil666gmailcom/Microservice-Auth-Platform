@@ -16,43 +16,40 @@ sequenceDiagram
     participant A as Analytics Service
 
     C->>G: GET /r/{short_url}
-    G->>S: Forward to Shortener
+    G->>S: Forward request to Shortener
     S->>S: Fetch URL (Redis Cache or Postgres)
     S-->>G: HTTP 302 (Redirect Target)
-    G-->>C: Redirect Target (Zero Latency Overhead)
+    G-->>C: HTTP 302 Redirect Target
 
     Note over S,K: Async Event Dispatch (Background Task)
-    S-)+K: Publish Event "url-redirects" {short_url, event: redirect}
-    deactivate S
+    S->>K: Publish Event "url-redirects" {short_url, event: "redirect"}
 
     Note over K,A: Event Ingestion (Background Consumer)
-    K-)+A: Push Event to Consumer
+    K->>A: Push Event to Consumer
     A->>A: Update In-Memory Counts (total_redirects, redirects_by_short_url)
-    deactivate A
 ```
 
 ---
 
 ## 2. Analytics Retrieval Flow
 
-The client retrieves analytics data via the API Gateway. The gateway validates the JWT token and proxies the stats request to the analytics container.
+The client retrieves analytics data via the API Gateway. The gateway validates the RS256 JWT signature in-memory using its public key and proxies the stats request to the analytics container with the `X-User-ID` header.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant C as Client (Browser)
     participant G as API Gateway
-    participant AU as Auth Service
     participant A as Analytics Service
 
     C->>G: GET /api/v1/analytics/stats
-    Note over C,G: Header: Authorization: Bearer <JWT>
+    Note right of C: Header: Authorization: Bearer <Consolidated_JWT>
     
-    G->>AU: Validate JWT Token
-    AU-->>G: JWT Token Validated
+    G->>G: Verify RS256 JWT Signature (in-memory using RSA Public Key)
     
     G->>A: Forward stats query to http://analytics:8003/stats
-    A-->>G: Returns analytics counts json
+    Note right of G: Header: X-User-ID: <sub_from_jwt>
+    A-->>G: Returns analytics counts JSON
     G-->>C: 200 OK with analytics data
 ```
 
@@ -61,11 +58,11 @@ sequenceDiagram
 ## 3. Data Schema
 
 ### Kafka Event Structure
-The message published on the `url-redirects` topic is a serialized JSON payload containing:
+The message published on the `url-redirects` topic is a serialized JSON payload containing the string short URL slug:
 
 ```json
 {
-  "short_url": 12345,
+  "short_url": "aB3x9k",
   "event": "redirect"
 }
 ```
@@ -77,7 +74,7 @@ The HTTP endpoint `/stats` returns a summary of the captured statistics:
 {
   "total_redirects": 1,
   "redirects_by_short_url": {
-    "12345": 1
+    "aB3x9k": 1
   }
 }
 ```

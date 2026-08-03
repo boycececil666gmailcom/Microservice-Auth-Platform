@@ -21,27 +21,20 @@ resource "kubernetes_namespace" "url_shortener" {
   }
 }
 
-# ── Configuration Map ─────────────────────────────────────────────────────────
-resource "kubernetes_config_map" "app_config" {
+# ── Secrets ───────────────────────────────────────────────────────────────────
+resource "kubernetes_secret" "google_oidc_secret" {
   metadata {
-    name      = "app-config"
+    name      = "google-oidc-secret"
     namespace = kubernetes_namespace.url_shortener.metadata[0].name
   }
 
+  type = "Opaque"
+
   data = {
-    SHORTENER_DB_URL          = "postgresql://postgres:postgres@shortener-db:5432/urlshortener"
-    SHORTENER_REDIS_URL       = "redis://shortener-redis:6379"
-    AUTH_DB_URL               = "postgresql://postgres:postgres@auth-db:5432/auth"
-    AUTH_REDIS_URL            = "redis://auth-redis:6379"
-    SHORTENER_URL             = "http://shortener:8001"
-    AUTH_URL                  = "http://auth:8002"
-    CACHE_TTL_SECONDS         = "86400"
-    JWT_EXPIRATION_MINUTES    = "15"
-    REFRESH_TOKEN_TTL_SECONDS = "2592000"
+    GOOGLE_CLIENT_SECRET = var.google_client_secret
   }
 }
 
-# ── Secrets ───────────────────────────────────────────────────────────────────
 resource "kubernetes_secret" "jwt_private_key" {
   metadata {
     name      = "jwt-private-key"
@@ -51,7 +44,7 @@ resource "kubernetes_secret" "jwt_private_key" {
   type = "Opaque"
 
   data = {
-    "private_key.pem" = file("${path.module}/${var.rsa_private_key_path}")
+    "private_key.pem" = var.rsa_private_key_pem != null ? var.rsa_private_key_pem : file("${path.module}/${var.rsa_private_key_path}")
   }
 }
 
@@ -64,7 +57,7 @@ resource "kubernetes_secret" "jwt_public_key" {
   type = "Opaque"
 
   data = {
-    "public_key.pem" = file("${path.module}/${var.rsa_public_key_path}")
+    "public_key.pem" = var.rsa_public_key_pem != null ? var.rsa_public_key_pem : file("${path.module}/${var.rsa_public_key_path}")
   }
 }
 

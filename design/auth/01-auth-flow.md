@@ -1,9 +1,8 @@
 # Auth Service Design
 
-This document details the authentication flow using the **Short-Lived Access Token + Long-Lived Refresh Token** pattern.
+This document details the authentication flows using the **Short-Lived Access Token + Long-Lived Refresh Token** pattern for both Password and Google OIDC authentication.
 
-## 1. Sign Up / Login & Token Issuance Flow
-
+## 1a. Email Password Sign Up / Login & Token Issuance Flow
 
 ```mermaid
 sequenceDiagram
@@ -13,16 +12,16 @@ sequenceDiagram
     participant PG as User DB (Postgres)
     participant R as Token DB (Redis)
 
-    C->>G: POST /auth/login {user, pass}
+    C->>G: POST /auth/login {email, password}
     G->>A: Forward request
-    A->>PG: Fetch user record by username
+    A->>PG: Fetch user record by email
     
     alt User DOES NOT exist (Sign Up)
         A->>A: Hash password with bcrypt (SLOW)
-        A->>PG: INSERT INTO users {username, password_hash}
+        A->>PG: INSERT INTO users {username=email, password_hash, sso_provider='local'}
         PG-->>A: Return new user_id
     else User DOES exist (Login)
-        PG-->>A: Return existing User Hash
+        PG-->>A: Return existing User Hash & sso_provider
         A->>A: Verify password against Hash (SLOW)
         alt Password Incorrect
             A-->>G: 401 Unauthorized
@@ -30,7 +29,7 @@ sequenceDiagram
         end
     end
     
-    A->>A: Generate Access Token (JWT, exp: 15m)
+    A->>A: Generate Consolidated Access Token (JWT sub, email, sso_provider='local', exp: 15m)
     A->>A: Generate Refresh Token (Opaque string)
     
     A->>R: SET refresh_token:{token} = user_id EX 30d
@@ -39,6 +38,56 @@ sequenceDiagram
     Note over A,G: Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
     G-->>C: 200 OK
 ```
+
+---
+
+## 1b. Google OpenID Connect (OIDC) Authorization Code Flow
+
+```mermaid
+sequenceDiagram
+    participant C as Client (Browser)
+    participant G as API Gateway
+    participant A as Auth Service
+    participant GO as Google OIDC Endpoint
+    participant PG as User DB (Postgres)
+    participant R as Token DB (Redis)
+
+    C->>G: GET /auth/google/login
+    G->>A: Forward request
+    A->>A: Generate state token for CSRF protection
+    A-->>G: Return {auth_url, state}
+    G-->>C: Return {auth_url, state}
+
+    Note over C,GO: --- Google Authentication & Consent ---
+    C->>GO: Redirect browser to Google Authorization URL
+    GO-->>C: User authenticates & redirects to /auth/google/callback?code=CODE&state=STATE
+
+    Note over C,R: --- Callback & Token Exchange ---
+    C->>G: POST /auth/google/callback {code, state}
+    G->>A: Forward callback request
+    A->>GO: POST /token (Exchange code for Google ID Token)
+    GO-->>A: Return Google ID Token (JWT)
+
+    A->>A: Parse claims (email, google_sub)
+    A->>PG: Fetch user by google_sub OR email
+
+    alt User DOES NOT exist
+        A->>PG: INSERT INTO users {username=email, sso_provider='google_oidc', google_sub}
+        PG-->>A: Return user record (email)
+    else User DOES exist
+        PG-->>A: Return user record (email)
+    end
+
+    A->>A: Generate Consolidated Access Token (JWT sub, email, sso_provider='google_oidc', exp: 15m)
+    A->>A: Generate Refresh Token (Opaque string)
+    A->>R: SET refresh_token:{token} = user_id EX 30d
+
+    A-->>G: 200 OK
+    Note over A,G: Consolidated RS256 JWT Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
+    G-->>C: 200 OK
+```
+
+---
 
 ## 2. Standard API Request & Background Refresh Flow
 
@@ -55,7 +104,7 @@ sequenceDiagram
 
     Note over C,S: --- 1. Standard Request Attempt ---
     C->>G: POST /api/v1/shorten
-    Note right of C: Header: Authorization: Bearer <JWT>
+    Note right of C: Header: Authorization: Bearer <Consolidated_JWT>
     
     G->>G: Verify JWT Signature (using RSA Public Key)
     
@@ -82,15 +131,15 @@ sequenceDiagram
             
         else Refresh Token Valid
             R-->>A: Return user_id
-            A->>PG: Check if user_id still exists/active
-            PG-->>A: User is Active
-            A->>A: Generate NEW Access Token (JWT, 15m)
+            A->>PG: Fetch user email & sso_provider by user_id
+            PG-->>A: Return user details (Active)
+            A->>A: Generate NEW Consolidated Access Token (JWT sub, email, sso_provider, 15m)
             A-->>G: 200 OK {access_token: "..."}
             G-->>C: 200 OK
             
             Note over C,S: --- 3. Retry Original Request ---
             C->>G: POST /api/v1/shorten (retry)
-            Note right of C: Header: Authorization: Bearer <NEW_JWT>
+            Note right of C: Header: Authorization: Bearer <NEW_CONSOLIDATED_JWT>
             G->>G: Verify NEW JWT Signature
             G->>S: Forward to Shortener
             S-->>G: 201 Created
@@ -99,25 +148,27 @@ sequenceDiagram
     end
 ```
 
+---
+
 ## 3. Logout / Revocation Flow
 
-When the user logs out, we immediately delete the Refresh Token.
+When the user logs out, we immediately delete the Refresh Token from Redis.
 
 ```mermaid
 sequenceDiagram
     participant C as Client (Browser)
     participant G as API Gateway
     participant A as Auth Service
-    participant DB as Auth DB
+    participant R as Token DB (Redis)
 
     C->>G: POST /auth/logout
     Note right of C: Cookie: refresh_token=<opaque_string>
     
     G->>A: Forward request
-    A->>DB: DELETE refresh_token WHERE token = <opaque_string>
+    A->>R: DEL refresh_token:{token}
     
     A-->>G: 200 OK (Clear Cookie)
     G-->>C: 200 OK (User logged out)
     
-    Note over C,DB: The user's Access Token might still work<br/>for up to 15 minutes (ghost window), but<br/>they cannot refresh it anymore.
+    Note over C,R: The user's Access Token might still work<br/>for up to 15 minutes (ghost window), but<br/>they cannot refresh it anymore.
 ```

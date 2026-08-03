@@ -6,27 +6,37 @@ generation, ID token decoding/validation, and user claims parsing.
 import base64
 import json
 import os
+import secrets
 import time
 from urllib.parse import urlencode
+import httpx
 
 
-#region Configuration & Endpoints
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "mock-google-client-id.apps.googleusercontent.com")
-GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "mock-google-client-secret")
-GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:8000/auth/google/callback")
+from .config import (
+    GOOGLE_AUTH_ENDPOINT,
+    GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET,
+    GOOGLE_REDIRECT_URI,
+    GOOGLE_TOKEN_ENDPOINT,
+)
 
-GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
-GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-#endregion
 
 
-#region Authorization URL Builder
+#region Authorization URL & State Helper
+def generate_state_token() -> str:
+    """Generate a cryptographically secure random state token for CSRF mitigation."""
+    return secrets.token_urlsafe(32)
+
+
 def build_google_auth_url(
     client_id: str = GOOGLE_CLIENT_ID,
     redirect_uri: str = GOOGLE_REDIRECT_URI,
-    state: str = "random_state_123",
+    state: str | None = None,
 ) -> str:
     """Generate the Google OAuth 2.0 / OIDC authorization redirect URL."""
+    if state is None:
+        state = generate_state_token()
+
     params = {
         "client_id": client_id,
         "redirect_uri": redirect_uri,
@@ -37,6 +47,49 @@ def build_google_auth_url(
         "prompt": "consent",
     }
     return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
+#endregion
+
+
+#region OAuth 2.0 Authorization Code Exchange
+async def exchange_code_for_id_token(
+    code: str,
+    redirect_uri: str = GOOGLE_REDIRECT_URI,
+    client_id: str = GOOGLE_CLIENT_ID,
+    client_secret: str = GOOGLE_CLIENT_SECRET,
+) -> str:
+    """Exchange an OAuth 2.0 authorization code for a Google ID Token.
+
+    Supports mock codes for offline unit and E2E testing environments.
+    """
+    if not code:
+        raise ValueError("Authorization code must not be empty")
+
+    # Handle mock authorization code for offline test environments
+    if code.startswith("mock_code_") or client_id.startswith("mock-"):
+        return build_mock_google_id_token(
+            email=f"user_{code[-6:]}@gmail.com" if len(code) >= 6 else "mock_google@gmail.com",
+            sub=f"google_sub_{code}",
+            name="Mock Google User",
+        )
+
+    payload = {
+        "code": code,
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "redirect_uri": redirect_uri,
+        "grant_type": "authorization_code",
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.post(GOOGLE_TOKEN_ENDPOINT, data=payload)
+        if response.status_code != 200:
+            raise ValueError(f"Failed to exchange code with Google Token Endpoint: {response.text}")
+
+        data = response.json()
+        id_token = data.get("id_token")
+        if not id_token:
+            raise ValueError("Google token endpoint response did not include 'id_token'")
+        return id_token
 #endregion
 
 

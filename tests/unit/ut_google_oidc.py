@@ -12,6 +12,7 @@ import pytest
 from services.auth import oidc
 
 
+#region Unit Tests
 def test_build_google_auth_url():
     """Verify Google OAuth 2.0 authorization URL contains expected parameters."""
     url = oidc.build_google_auth_url(state="custom_state_456")
@@ -20,6 +21,24 @@ def test_build_google_auth_url():
     assert "response_type=code" in url
     assert "scope=openid+email+profile" in url or "scope=openid" in url
     assert "state=custom_state_456" in url
+
+
+def test_generate_state_token():
+    """Verify random state token is unique and non-empty."""
+    state1 = oidc.generate_state_token()
+    state2 = oidc.generate_state_token()
+    assert len(state1) > 10
+    assert state1 != state2
+
+
+@pytest.mark.asyncio
+async def test_exchange_code_for_id_token():
+    """Verify exchange_code_for_id_token handles mock codes correctly."""
+    id_token = await oidc.exchange_code_for_id_token("mock_code_12345")
+    assert id_token is not None
+    user_info = oidc.parse_google_id_token(id_token)
+    assert "google_sub" in user_info
+    assert "email" in user_info
 
 
 def test_parse_valid_mock_google_id_token():
@@ -47,3 +66,5 @@ def test_parse_missing_claims_raises_value_error():
     invalid_token = '{"name": "No Sub User"}'
     with pytest.raises(ValueError, match="missing required 'email' or 'sub' claims"):
         oidc.parse_google_id_token(invalid_token)
+#endregion
+

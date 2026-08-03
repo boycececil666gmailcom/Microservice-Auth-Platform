@@ -54,12 +54,6 @@ resource "kubernetes_deployment" "gateway" {
               }
             }
           }
-
-          env_from {
-            config_map_ref {
-              name = kubernetes_config_map.app_config.metadata[0].name
-            }
-          }
         }
       }
     }
@@ -114,7 +108,7 @@ resource "kubernetes_deployment" "auth" {
       spec {
         container {
           name              = "auth"
-          image             = "url-shortener-auth:v3"
+          image             = "url-shortener-auth:v7"
           image_pull_policy = "IfNotPresent"
 
           port {
@@ -152,10 +146,24 @@ resource "kubernetes_deployment" "auth" {
             }
           }
 
-          env_from {
-            config_map_ref {
-              name = kubernetes_config_map.app_config.metadata[0].name
+          env {
+            name  = "GOOGLE_CLIENT_ID"
+            value = var.google_client_id
+          }
+
+          env {
+            name = "GOOGLE_CLIENT_SECRET"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.google_oidc_secret.metadata[0].name
+                key  = "GOOGLE_CLIENT_SECRET"
+              }
             }
+          }
+
+          env {
+            name  = "GOOGLE_REDIRECT_URI"
+            value = var.google_redirect_uri
           }
         }
       }
@@ -237,12 +245,6 @@ resource "kubernetes_deployment" "shortener" {
           env {
             name  = "REDIS_URL"
             value = var.shortener_redis_url
-          }
-
-          env_from {
-            config_map_ref {
-              name = kubernetes_config_map.app_config.metadata[0].name
-            }
           }
         }
       }

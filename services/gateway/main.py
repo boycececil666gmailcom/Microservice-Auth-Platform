@@ -18,21 +18,9 @@ import jwt
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 
 
-#region Service URLs
-# These are Docker internal hostnames — not exposed to the outside world.
-SHORTENER_URL = os.environ.get("SHORTENER_URL", "http://shortener:8001")
-AUTH_URL = os.environ.get("AUTH_URL", "http://auth:8002")
-ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "http://analytics:8003")
-#endregion
+from . import config
+from .config import ANALYTICS_URL, AUTH_URL, JWT_ALGORITHM, JWT_PUBLIC_KEY, SHORTENER_URL
 
-
-#region JWT Public Key Configuration
-JWT_ALGORITHM = "RS256"
-JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY")
-
-if not JWT_PUBLIC_KEY:
-    raise RuntimeError("Gateway requires JWT_PUBLIC_KEY env var")
-#endregion
 
 
 #region HTTP Client Lifespan
@@ -204,15 +192,21 @@ async def auth_logout(request: Request):
 
 #region Google OIDC Proxy Routes
 @app.get("/auth/google/login")
-async def google_login():
+async def google_login(request: Request):
     """Forward GET /auth/google/login to the Auth service."""
-    resp = await get_client().get(f"{AUTH_URL}/auth/google/login")
+    query_string = str(request.url.query)
+    target_url = f"{AUTH_URL}/auth/google/login"
+    if query_string:
+        target_url = f"{target_url}?{query_string}"
+
+    resp = await get_client().get(target_url)
     _raise_for_upstream_error(resp)
     return Response(
         content=resp.content,
         status_code=resp.status_code,
         media_type="application/json",
     )
+
 
 
 @app.post("/auth/google/callback")

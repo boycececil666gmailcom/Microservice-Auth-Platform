@@ -51,3 +51,39 @@ variable "shortener_redis_url" {
   description = "Redis connection string for Shortener service"
   default     = "redis://shortener-redis:6379"
 }
+
+# ── Google OIDC Variables ──────────────────────────────────────────────────────
+variable "google_client_id" {
+  type        = string
+  description = "Google OAuth 2.0 Client ID for OIDC authentication"
+  default     = "mock-google-client-id.apps.googleusercontent.com"
+}
+
+variable "google_client_secret" {
+  type        = string
+  description = "Google OAuth 2.0 Client Secret for OIDC authentication"
+  sensitive   = true
+  default     = "mock-google-client-secret"
+}
+
+variable "google_redirect_uri" {
+  type        = string
+  description = "Google OAuth 2.0 Authorized Redirect URI"
+  default     = "http://localhost/auth/google/callback"
+}
+
+# ── RSA Key Pem Variables ──────────────────────────────────────────────────────
+variable "rsa_private_key_pem" {
+  type        = string
+  description = "RSA private key PEM string for token signing."
+  sensitive   = true
+  default     = null
+}
+
+variable "rsa_public_key_pem" {
+  type        = string
+  description = "RSA public key PEM string for token verification."
+  default     = null
+}
+
+

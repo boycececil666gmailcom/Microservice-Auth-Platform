@@ -15,12 +15,14 @@ from services.auth.oidc import build_mock_google_id_token
 GATEWAY_URL = "http://localhost:8000"
 
 
+#region End-to-End Tests
 def test_google_login_auth_url_endpoint():
     """Verify GET /auth/google/login returns Google OAuth 2.0 authorization URL via Gateway."""
     resp = requests.get(f"{GATEWAY_URL}/auth/google/login")
     assert resp.status_code == 200
     data = resp.json()
     assert "auth_url" in data
+    assert "state" in data
     assert "https://accounts.google.com/o/oauth2/v2/auth" in data["auth_url"]
 
 
@@ -56,3 +58,20 @@ def test_google_oidc_callback_and_protected_access():
     assert shorten_resp.status_code == 201, f"Shorten URL failed: {shorten_resp.text}"
     shorten_data = shorten_resp.json()
     assert "short_url" in shorten_data
+
+
+def test_google_oidc_code_callback_flow():
+    """Verify POST /auth/google/callback with authorization code exchanges code and issues token."""
+    mock_code = f"mock_code_{uuid.uuid4().hex[:8]}"
+    session = requests.Session()
+
+    cb_resp = session.post(
+        f"{GATEWAY_URL}/auth/google/callback",
+        json={"code": mock_code, "state": "test_state_123"},
+    )
+    assert cb_resp.status_code == 200, f"Google OIDC Code Callback failed: {cb_resp.text}"
+    cb_data = cb_resp.json()
+    assert "access_token" in cb_data
+    assert "refresh_token" in session.cookies
+#endregion
+
