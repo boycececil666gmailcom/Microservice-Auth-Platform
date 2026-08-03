@@ -1,7 +1,7 @@
 import os
 import asyncpg
 
-# Read the connection string injected by docker-compose.
+# Read the connection string injected by k8s ConfigMap (or a local .env).
 # Example: postgresql://postgres:postgres@db:5432/urlshortener
 DATABASE_URL = os.environ["DATABASE_URL"]
 

@@ -8,5 +8,5 @@ dependencies = [
     "asyncpg>=0.29",
     "redis[asyncio]>=5.0",
     "bcrypt>=4.0",
-    "pyjwt>=2.13.0",
+    "pyjwt[crypto]>=2.13.0",
 ]

@@ -61,7 +61,7 @@ flowchart TB
     end
 
     subgraph AuthSvc["Auth Service"]
-        Auth["Auth handler<br/>(JWT / OAuth2)"]
+        Auth["Auth handler<br/>(RS256 Private Key)"]
         subgraph AuthDB["Owned Storage"]
             UserDB[("User DB<br/>(PostgreSQL)")]
         end
@@ -121,7 +121,7 @@ flowchart TB
     end
 
     subgraph Exposed["Exposed to Host"]
-        GW["gateway<br/>(FastAPI + Uvicorn)<br/>port 8000"]
+        GW["gateway<br/>(FastAPI + Uvicorn)<br/>RS256 Public Key JWT Verification<br/>port 8000"]
     end
 
     subgraph Internal["Docker Internal Network - not reachable from host"]
@@ -134,7 +134,6 @@ flowchart TB
 
         subgraph AuthCtr["auth (FastAPI + Uvicorn, port 8002)"]
             direction TB
-            ValidateH["GET /auth/validate"]
             LoginH["POST /auth/login"]
             RefreshH["POST /auth/refresh"]
             LogoutH["POST /auth/logout"]

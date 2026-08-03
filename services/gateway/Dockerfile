@@ -17,6 +17,10 @@ RUN uv sync --frozen --no-dev
 # ── Copy application source ───────────────────────────────────────────────────
 COPY services/gateway/ ./gateway/
 
+# ── Copy RSA public key (dev default — override via k8s secret mount) ─────────
+COPY keys/public_key.pem /app/keys/public_key.pem
+ENV JWT_PUBLIC_KEY_PATH=/app/keys/public_key.pem
+
 # ── Run the server ────────────────────────────────────────────────────────────
 CMD ["uv", "run", "uvicorn", "gateway.main:app", \
      "--host", "0.0.0.0", "--port", "8000", "--reload"]

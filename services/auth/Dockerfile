@@ -18,6 +18,10 @@ RUN uv sync --frozen --no-dev
 # ── Copy application source ───────────────────────────────────────────────────
 COPY services/auth/ ./auth/
 
+# ── Copy RSA private key (dev default — override via k8s secret mount) ────────
+COPY keys/private_key.pem /app/keys/private_key.pem
+ENV JWT_PRIVATE_KEY_PATH=/app/keys/private_key.pem
+
 # ── Run the server ────────────────────────────────────────────────────────────
 # Internal service — not exposed to the host, only reachable inside Docker network.
 CMD ["uv", "run", "uvicorn", "auth.main:app", \

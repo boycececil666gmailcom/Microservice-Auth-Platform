@@ -3,7 +3,7 @@ API Gateway — thin transparent proxy.
 
 Responsibilities:
   - Receive HTTP requests from the end user
-  - (Future) validate JWT, rate-limit, async kafka pipeline
+  - Validate JWT access tokens locally using the RS256 public key
   - Forward the request to the appropriate internal service via httpx
   - Return the response to the end user
 
@@ -12,8 +12,10 @@ No business logic lives here.
 
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import httpx
+import jwt
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 
 
@@ -22,6 +24,22 @@ from fastapi import FastAPI, HTTPException, Request, Response, Depends
 SHORTENER_URL = os.environ.get("SHORTENER_URL", "http://shortener:8001")
 AUTH_URL = os.environ.get("AUTH_URL", "http://auth:8002")
 ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "http://analytics:8003")
+
+# ── RS256 Public Key (used to VERIFY tokens — cannot sign) ────────────────────
+# Load from file path (preferred) or inline PEM string (k8s secret injection).
+JWT_ALGORITHM = "RS256"
+
+_public_key_path = os.environ.get("JWT_PUBLIC_KEY_PATH")
+_public_key_inline = os.environ.get("JWT_PUBLIC_KEY")
+
+if _public_key_path:
+    JWT_PUBLIC_KEY = Path(_public_key_path).read_text()
+elif _public_key_inline:
+    JWT_PUBLIC_KEY = _public_key_inline
+else:
+    raise RuntimeError(
+        "Gateway requires JWT_PUBLIC_KEY_PATH or JWT_PUBLIC_KEY env var"
+    )
 
 
 # ── Shared async httpx client ─────────────────────────────────────────────────
@@ -48,18 +66,21 @@ def get_client() -> httpx.AsyncClient:
 
 app = FastAPI(title="API Gateway", version="0.1.0", lifespan=lifespan)
 
-async def verify_token(request: Request):
+async def verify_token(request: Request) -> dict:
+    """Verify JWT access token locally using the RS256 public key.
+
+    No network call to the Auth Service — pure in-memory cryptographic check.
+    """
     auth_header = request.headers.get("Authorization")
-    if not auth_header:
+    if not auth_header or not auth_header.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Not authenticated")
 
-    resp = await get_client().get(
-        f"{AUTH_URL}/auth/validate",
-        headers={"Authorization": auth_header}
-    )
-    if resp.status_code != 200:
+    token = auth_header.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, JWT_PUBLIC_KEY, algorithms=[JWT_ALGORITHM])
+        return payload
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return resp.json()
 
 
 # ── Health ────────────────────────────────────────────────────────────────────

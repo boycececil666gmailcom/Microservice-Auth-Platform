@@ -1,13 +1,27 @@
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import jwt
 import redis.asyncio as aioredis
 
-JWT_SECRET = os.environ.get("JWT_SECRET", "dev-secret-change-me")
-JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
+# ── RS256 Private Key (used to SIGN tokens) ──────────────────────────────────
+# Load from file path (preferred) or inline PEM string (k8s secret injection).
+JWT_ALGORITHM = "RS256"
 JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "15"))
+
+_private_key_path = os.environ.get("JWT_PRIVATE_KEY_PATH")
+_private_key_inline = os.environ.get("JWT_PRIVATE_KEY")
+
+if _private_key_path:
+    JWT_PRIVATE_KEY = Path(_private_key_path).read_text()
+elif _private_key_inline:
+    JWT_PRIVATE_KEY = _private_key_inline
+else:
+    raise RuntimeError(
+        "Auth service requires JWT_PRIVATE_KEY_PATH or JWT_PRIVATE_KEY env var"
+    )
 
 REDIS_URL = os.environ["REDIS_URL"]
 
@@ -37,7 +51,7 @@ def create_access_token(user_id: int) -> str:
         "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION_MINUTES),
         "iat": datetime.now(timezone.utc),
     }
-    return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return jwt.encode(payload, JWT_PRIVATE_KEY, algorithm=JWT_ALGORITHM)
 
 
 def generate_refresh_token() -> str:
