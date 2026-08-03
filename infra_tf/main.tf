@@ -30,9 +30,9 @@ resource "kubernetes_config_map" "app_config" {
 
   data = {
     SHORTENER_DB_URL          = "postgresql://postgres:postgres@shortener-db:5432/urlshortener"
-    SHORTENER_REDIS_URL       = "redis://rfrm-shortener-redis:6379"
+    SHORTENER_REDIS_URL       = "redis://shortener-redis:6379"
     AUTH_DB_URL               = "postgresql://postgres:postgres@auth-db:5432/auth"
-    AUTH_REDIS_URL            = "redis://rfrm-auth-redis:6379"
+    AUTH_REDIS_URL            = "redis://auth-redis:6379"
     SHORTENER_URL             = "http://shortener:8001"
     AUTH_URL                  = "http://auth:8002"
     CACHE_TTL_SECONDS         = "86400"
@@ -67,5 +67,33 @@ resource "kubernetes_secret" "jwt_public_key" {
 
   data = {
     "public_key.pem" = file("${path.module}/${var.rsa_public_key_path}")
+  }
+}
+
+resource "kubernetes_secret" "auth_db_credentials" {
+  metadata {
+    name      = "postgres.auth-db.credentials.postgresql.acid.zalan.do"
+    namespace = kubernetes_namespace.url_shortener.metadata[0].name
+  }
+
+  type = "Opaque"
+
+  data = {
+    username = "postgres"
+    password = "postgres"
+  }
+}
+
+resource "kubernetes_secret" "shortener_db_credentials" {
+  metadata {
+    name      = "postgres.shortener-db.credentials.postgresql.acid.zalan.do"
+    namespace = kubernetes_namespace.url_shortener.metadata[0].name
+  }
+
+  type = "Opaque"
+
+  data = {
+    username = "postgres"
+    password = "postgres"
   }
 }
