@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import redis.asyncio as aioredis
 
-# ── RS256 Private Key (used to SIGN tokens) ──────────────────────────────────
+
+#region Configuration & Keys
 JWT_ALGORITHM = "RS256"
 JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "15"))
 JWT_PRIVATE_KEY = os.environ.get("JWT_PRIVATE_KEY")
@@ -17,8 +18,10 @@ REDIS_URL = os.environ["REDIS_URL"]
 
 # Refresh tokens expire after 30 days.
 REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("REFRESH_TOKEN_TTL_SECONDS", str(60 * 60 * 24 * 30)))
+#endregion
 
-# Module-level pool, created once at startup.
+
+#region Redis Connection Pool
 redis_pool: aioredis.Redis | None = None
 
 
@@ -32,8 +35,10 @@ async def close_redis_pool() -> None:
     """Close the Redis connection pool. Call this at app shutdown."""
     if redis_pool:
         await redis_pool.aclose()
+#endregion
 
 
+#region Access Token & Refresh Token Management
 def create_access_token(user_id: int) -> str:
     """Create a signed JWT access token with a 15-minute expiration."""
     payload = {
@@ -77,3 +82,4 @@ async def get_user_id_by_token(token: str) -> int | None:
 async def delete_refresh_token(token: str) -> None:
     """Revoke a refresh token by removing it from Redis."""
     await redis_pool.delete(_token_key(token))
+#endregion

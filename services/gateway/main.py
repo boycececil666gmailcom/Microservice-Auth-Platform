@@ -18,22 +18,24 @@ import jwt
 from fastapi import FastAPI, HTTPException, Request, Response, Depends
 
 
-# ── Internal service URLs ─────────────────────────────────────────────────────
+#region Service URLs
 # These are Docker internal hostnames — not exposed to the outside world.
 SHORTENER_URL = os.environ.get("SHORTENER_URL", "http://shortener:8001")
 AUTH_URL = os.environ.get("AUTH_URL", "http://auth:8002")
 ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "http://analytics:8003")
+#endregion
 
-# ── RS256 Public Key (used to VERIFY tokens — cannot sign) ────────────────────
+
+#region JWT Public Key Configuration
 JWT_ALGORITHM = "RS256"
 JWT_PUBLIC_KEY = os.environ.get("JWT_PUBLIC_KEY")
 
 if not JWT_PUBLIC_KEY:
     raise RuntimeError("Gateway requires JWT_PUBLIC_KEY env var")
+#endregion
 
 
-# ── Shared async httpx client ─────────────────────────────────────────────────
-# A single client is reused across requests (connection pool).
+#region HTTP Client Lifespan
 _http_client: httpx.AsyncClient | None = None
 
 
@@ -50,10 +52,10 @@ def get_client() -> httpx.AsyncClient:
     if _http_client is None:
         raise RuntimeError("HTTP client not initialised")
     return _http_client
+#endregion
 
 
-# ── App ───────────────────────────────────────────────────────────────────────
-
+#region FastAPI App & Security Middleware
 app = FastAPI(title="API Gateway", version="0.1.0", lifespan=lifespan)
 
 async def verify_token(request: Request) -> dict:
@@ -71,17 +73,17 @@ async def verify_token(request: Request) -> dict:
         return payload
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
+#endregion
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
-
+#region Health Endpoints
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+#endregion
 
 
-# ── Write Path ────────────────────────────────────────────────────────────────
-
+#region Write Path Endpoints
 @app.post("/api/v1/shorten", status_code=201)
 async def shorten_url(request: Request, token: dict = Depends(verify_token)):
     """Forward POST /api/v1/shorten to the Shortener service."""
@@ -100,10 +102,10 @@ async def shorten_url(request: Request, token: dict = Depends(verify_token)):
         status_code=resp.status_code,
         media_type="application/json",
     )
+#endregion
 
 
-# ── Read Path ─────────────────────────────────────────────────────────────────
-
+#region Read Path Endpoints
 @app.get("/api/v1/urls/{short_url}")
 async def get_url(short_url: int, token: dict = Depends(verify_token)):
     """Forward GET /api/v1/urls/{short_url} to the Shortener service."""
@@ -141,10 +143,10 @@ async def redirect(short_url: int):
         status_code=resp.status_code,
         headers=dict(resp.headers),
     )
+#endregion
 
 
-# ── Auth Routes ───────────────────────────────────────────────────────────────
-
+#region Auth Proxy Routes
 @app.post("/auth/login")
 async def auth_login(request: Request):
     """Forward POST /auth/login to the Auth service."""
@@ -197,10 +199,42 @@ async def auth_logout(request: Request):
         media_type="application/json",
         headers=dict(resp.headers),
     )
+#endregion
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+#region Google OIDC Proxy Routes
+@app.get("/auth/google/login")
+async def google_login():
+    """Forward GET /auth/google/login to the Auth service."""
+    resp = await get_client().get(f"{AUTH_URL}/auth/google/login")
+    _raise_for_upstream_error(resp)
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type="application/json",
+    )
 
+
+@app.post("/auth/google/callback")
+async def google_callback(request: Request):
+    """Forward POST /auth/google/callback to the Auth service."""
+    body = await request.body()
+    resp = await get_client().post(
+        f"{AUTH_URL}/auth/google/callback",
+        content=body,
+        headers={"Content-Type": "application/json"},
+    )
+    _raise_for_upstream_error(resp)
+    return Response(
+        content=resp.content,
+        status_code=resp.status_code,
+        media_type="application/json",
+        headers=dict(resp.headers),
+    )
+#endregion
+
+
+#region Helper Functions
 def _raise_for_upstream_error(resp: httpx.Response) -> None:
     """Re-raise 4xx/5xx responses from upstream as FastAPI HTTPExceptions."""
     if resp.status_code >= 400:
@@ -209,3 +243,4 @@ def _raise_for_upstream_error(resp: httpx.Response) -> None:
         except Exception:
             detail = resp.text
         raise HTTPException(status_code=resp.status_code, detail=detail)
+#endregion

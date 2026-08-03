@@ -23,4 +23,4 @@ ENV JWT_PUBLIC_KEY_PATH=/app/keys/public_key.pem
 
 # ── Run the server ────────────────────────────────────────────────────────────
 CMD ["uv", "run", "uvicorn", "gateway.main:app", \
-     "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    "--host", "0.0.0.0", "--port", "8000", "--reload"]

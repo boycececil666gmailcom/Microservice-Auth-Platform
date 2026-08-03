@@ -14,6 +14,7 @@ from .database import close_pool, create_db_pool, get_db
 from .schemas import ShortenRequest, URLCreateResponse, URLLookupResponse
 
 
+#region Configuration & Lifespan
 KAFKA_BROKER_URL = os.environ.get("KAFKA_BROKER_URL", "kafka:9092")
 KAFKA_TOPIC = "url-redirects"
 kafka_producer = None
@@ -55,17 +56,17 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Shortener Service", version="0.1.0", lifespan=lifespan)
+#endregion
 
 
-# ── Health ────────────────────────────────────────────────────────────────────
-
+#region Health Endpoints
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+#endregion
 
 
-# ── Write Path ────────────────────────────────────────────────────────────────
-
+#region Write Path Endpoints
 @app.post("/shorten", response_model=URLCreateResponse, status_code=201)
 async def shorten_url(
     body: ShortenRequest,
@@ -81,10 +82,10 @@ async def shorten_url(
         long_url=url_row["long_url"],
         created_at=url_row["created_at"],
     )
+#endregion
 
 
-# ── Read Path ─────────────────────────────────────────────────────────────────
-
+#region Read Path Endpoints
 @app.get("/urls/{short_url}", response_model=URLLookupResponse)
 async def get_url(
     short_url: int,
@@ -94,12 +95,12 @@ async def get_url(
 
     Cache-aside: check Redis first; on a miss, query Postgres and warm the cache.
     """
-    # ── Cache hit ─────────────────────────────────────────────────────────────
+    # Cache hit
     cached = await get_cached_url(short_url)
     if cached is not None:
         return URLLookupResponse(**cached)
 
-    # ── Cache miss: fall back to Postgres ─────────────────────────────────────
+    # Cache miss: fall back to Postgres
     url_row = await get_url_by_id(conn, short_url)
     if url_row is None:
         raise HTTPException(status_code=404, detail="Short URL not found")
@@ -131,13 +132,13 @@ async def redirect(
 
     Cache-aside: same strategy as get_url — Redis first, Postgres on miss.
     """
-    # ── Cache hit ─────────────────────────────────────────────────────────────
+    # Cache hit
     cached = await get_cached_url(short_url)
     if cached is not None:
         asyncio.create_task(send_analytics_event(short_url))
         return RedirectResponse(url=cached["long_url"], status_code=302)
 
-    # ── Cache miss: fall back to Postgres ─────────────────────────────────────
+    # Cache miss: fall back to Postgres
     url_row = await get_url_by_id(conn, short_url)
     if url_row is None:
         raise HTTPException(status_code=404, detail="Short URL not found")
@@ -145,3 +146,4 @@ async def redirect(
     await set_cached_url(url_row)
     asyncio.create_task(send_analytics_event(short_url))
     return RedirectResponse(url=url_row["long_url"], status_code=302)
+#endregion

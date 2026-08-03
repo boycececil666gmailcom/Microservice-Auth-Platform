@@ -25,4 +25,4 @@ ENV JWT_PRIVATE_KEY_PATH=/app/keys/private_key.pem
 # ── Run the server ────────────────────────────────────────────────────────────
 # Internal service — not exposed to the host, only reachable inside Docker network.
 CMD ["uv", "run", "uvicorn", "auth.main:app", \
-     "--host", "0.0.0.0", "--port", "8002", "--reload"]
+    "--host", "0.0.0.0", "--port", "8002", "--reload"]
