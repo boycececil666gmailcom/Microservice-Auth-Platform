@@ -1,9 +1,10 @@
-# Enterprise URL Shortener Platform
+# Microservice Authentication Platform
 
-> High-throughput microservice-based link management and real-time click analytics platform engineered for enterprise brand marketing and instant URL redirection.
+> Production-grade authentication microservice implementing JWT RS256 asymmetric signing, Google OpenID Connect (OIDC), Redis-backed refresh token rotation, and bcrypt password hashing — deployed as an isolated Docker container behind an API Gateway with zero-trust local token verification.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi&logoColor=white)
+![JWT](https://img.shields.io/badge/JWT-RS256-000000?style=flat&logo=jsonwebtokens&logoColor=white)
 ![Redis](https://img.shields.io/badge/Redis-7.0+-DC382D?style=flat&logo=redis&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-4169E1?style=flat&logo=postgresql&logoColor=white)
 ![Apache Kafka](https://img.shields.io/badge/Apache_Kafka-3.0+-231F20?style=flat&logo=apachekafka&logoColor=white)
@@ -13,53 +14,159 @@
 
 ---
 
-## 1. Core Purpose & Business Value
+## 1. Authentication Architecture & Design Decisions
 
-Enterprise URL Shortener Platform converts long, complex web links into concise, memorable brand assets while delivering real-time marketing intelligence and sub-millisecond redirection reliability.
+This platform implements a **dual authentication strategy** — local password auth and Google OIDC — unified under a single RS256 JWT schema. The key design decisions are documented below.
 
-- **Brand Recognition & Click-Through Optimization**: Transforms awkward web addresses into clean, trustworthy branded short links, dramatically improving click-through rates across marketing channels.
-- **Real-Time Customer Campaign Intelligence**: Captures visitor engagement metrics, geographical reach, and channel performance immediately to optimize ad spend.
-- **Enterprise High-Availability SLA**: Guarantees zero-downtime redirection performance for high-volume customer traffic spikes and seasonal promotions.
-- **Security & Account Control**: Enforces precise organizational access controls, protecting enterprise links from unauthorized alterations or malicious hijacks.
+### Why RS256 (Asymmetric) Instead of HS256 (Symmetric)?
 
----
+| Aspect | RS256 (this project) | HS256 |
+|--------|----------------------|-------|
+| Key type | RSA private + public key pair | Single shared secret |
+| Token issuer | Signs with private key (Auth Service only) | Any party with the secret can sign |
+| Token verifier | Verifies with public key (Gateway, any service) | Must share the same secret |
+| Security boundary | Private key never leaves Auth container | Secret must be distributed to all verifiers |
+| **Use case** | **Microservices, federated identity** | Single-service monolith |
 
-## 2. System Architecture & Technical Execution
+> **In this project**: The API Gateway verifies every incoming JWT **locally** using the RS256 public key — zero network round-trips to the Auth Service per request. This is the same model used by Google, Auth0, and AWS Cognito.
 
-### Core Concept & Phased Execution Diagram
+### Auth Flow: Login / Sign-up (Dual-Provider)
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Visitor as Visitor / User
-    participant S as URL Shortener Gateway
-    participant A as Click Analytics Service
+    actor C as Client
+    participant GW as API Gateway<br/>(RS256 Public Key)
+    participant Auth as Auth Service<br/>(RS256 Private Key)
+    participant PG as PostgreSQL<br/>(users table)
+    participant RD as Redis<br/>(refresh_token:{token} → email)
 
-    Note over Visitor, S: Phase 1: Shorten URL (Generation Path)
-    Visitor->>S: Submit Long URL (POST /shorten)
-    S-->>Visitor: Return Branded Short URL (e.g., https://shrt.co/xYz9b)
-
-    Note over Visitor, S: Phase 2: Access & Redirection (Read Path)
-    Visitor->>S: Click Short URL (GET /r/xYz9b)
-    alt Cache Hit / Valid Mapping
-        rect rgb(235, 247, 238)
-            S-->>Visitor: HTTP 302 Redirect (Location: https://example.com/target)
-        end
-    else Cache Miss / DB Fallback
-        rect rgb(255, 243, 205)
-            S->>S: Fetch from Database & Warm Cache
-            S-->>Visitor: HTTP 302 Redirect
-        end
-    else Link Not Found
-        rect rgb(253, 237, 237)
-            S-->>Visitor: HTTP 404 Not Found
-        end
+    Note over C, GW: Path A — Password Authentication (POST /auth/login)
+    C->>GW: POST /auth/login { email, password }
+    GW->>Auth: Forward request (no auth required)
+    Auth->>PG: SELECT password_hash WHERE email = $1
+    alt User not found (Sign-up)
+        Auth->>PG: INSERT INTO users (email, bcrypt_hash, 'local')
+    else User found (Login)
+        Auth->>Auth: bcrypt.checkpw(password, hash)
     end
-    
-    Note over S, A: Phase 3: Asynchronous Tracking (Background Path)
-    S-)+A: Capture click event via Queue (stats count +1)
-    deactivate A
+    Auth->>Auth: jwt.encode(payload, RS256_PRIVATE_KEY)
+    Auth->>RD: SET refresh_token:{token} = email  TTL=30d
+    Auth-->>GW: { access_token } + Set-Cookie: refresh_token (HttpOnly)
+    GW-->>C: 200 OK
+
+    Note over C, GW: Path B — Google OIDC (POST /auth/google/callback)
+    C->>GW: POST /auth/google/callback { id_token OR code }
+    GW->>Auth: Forward request
+    Auth->>Auth: base64url.decode(id_token.payload) → { email, sub }
+    Auth->>PG: SELECT WHERE google_sub=$1 OR email=$2
+    alt New Google user (auto-provision)
+        Auth->>PG: INSERT INTO users (email, 'GOOGLE_OIDC_USER_NO_PASSWORD', 'google_oidc', sub)
+    end
+    Auth->>Auth: jwt.encode(payload, RS256_PRIVATE_KEY)
+    Auth->>RD: SET refresh_token:{token} = email  TTL=30d
+    Auth-->>C: { access_token } + Set-Cookie: refresh_token (HttpOnly)
 ```
+
+### Auth Flow: Protected Request Verification (Zero-Trust Gateway)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Client
+    participant GW as API Gateway<br/>(RS256 Public Key — in-memory)
+    participant SVC as Internal Service<br/>(Shortener / Analytics)
+
+    C->>GW: GET /api/v1/... Authorization: Bearer <JWT>
+    GW->>GW: jwt.decode(token, RS256_PUBLIC_KEY)<br/>★ No network call to Auth Service
+    alt Valid token
+        GW->>SVC: Forward request (internal Docker network)
+        SVC-->>GW: Response
+        GW-->>C: 200 OK
+    else Expired / Invalid signature
+        GW-->>C: 401 Unauthorized
+    end
+```
+
+### Auth Flow: Refresh Token Rotation
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor C as Client
+    participant GW as API Gateway
+    participant Auth as Auth Service
+    participant RD as Redis
+
+    Note over C: Access token expired (15 min TTL)
+    C->>GW: POST /auth/refresh  Cookie: refresh_token=<opaque>
+    GW->>Auth: Forward cookies
+    Auth->>RD: GET refresh_token:{token}  → email
+    alt Token found (valid, not revoked)
+        Auth->>Auth: jwt.encode(new payload, RS256_PRIVATE_KEY)
+        Auth-->>C: { access_token } (new 15-min JWT)
+    else Token missing or expired (30d TTL elapsed)
+        Auth-->>C: 401 — re-login required
+    end
+
+    Note over C: Logout
+    C->>GW: POST /auth/logout  Cookie: refresh_token=<opaque>
+    GW->>Auth: Forward cookies
+    Auth->>RD: DEL refresh_token:{token}  ★ Immediate revocation
+    Auth-->>C: 200 + Set-Cookie: refresh_token="" (cleared)
+```
+
+---
+
+## 2. Auth Service Implementation
+
+### Core Modules
+
+| Module | Responsibility |
+|--------|---------------|
+| `services/auth/main.py` | FastAPI app — login, refresh, logout, Google OIDC endpoints |
+| `services/auth/tokens.py` | `create_access_token()` (RS256 JWT), `generate_refresh_token()` (opaque), Redis store/get/delete |
+| `services/auth/passwords.py` | `hash_password()` (bcrypt), `verify_password()` (bcrypt.checkpw) |
+| `services/auth/oidc.py` | `build_google_auth_url()`, `exchange_code_for_id_token()`, `parse_google_id_token()` |
+| `services/auth/database.py` | asyncpg connection pool, `init_users_table()` (auto-migration) |
+| `services/auth/config.py` | ENV-driven config: RSA keys, Redis URL, OIDC credentials, TTL constants |
+| `services/gateway/main.py` | `verify_token()` — pure in-memory RS256 public key JWT decode (no auth service call) |
+
+### JWT Payload Schema
+
+```json
+{
+  "sub": "user@example.com",
+  "email": "user@example.com",
+  "sso_provider": "local | google_oidc",
+  "iat": 1700000000,
+  "exp": 1700000900
+}
+```
+
+### PostgreSQL `users` Table Schema
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    email         VARCHAR(255) PRIMARY KEY,
+    password_hash VARCHAR(255) NOT NULL,
+    sso_provider  VARCHAR(50)  DEFAULT 'local',
+    google_sub    VARCHAR(255),
+    created_at    TIMESTAMPTZ  DEFAULT NOW()
+);
+```
+
+### Redis Refresh Token Schema
+
+```
+Key:   refresh_token:{64-byte-urlsafe-random-token}
+Value: user@example.com
+TTL:   2,592,000 seconds (30 days)
+```
+
+---
+
+## 3. System Architecture
 
 ### High-Level Target Production Architecture Diagram
 
@@ -161,6 +268,7 @@ flowchart TB
             LoginH["POST /auth/login"]
             RefreshH["POST /auth/refresh"]
             LogoutH["POST /auth/logout"]
+            GoogleH["GET  /auth/google/login<br/>POST /auth/google/callback"]
         end
 
         subgraph AnalyticsCtr["analytics (FastAPI + Uvicorn, port 8003)"]
@@ -182,7 +290,7 @@ flowchart TB
         end
 
         subgraph AuthRedisCtr["auth-redis (Redis 7, port 6379)"]
-            TokenStore["key: refresh_token:{token}<br/>value: user_id<br/>TTL: 30d"]
+            TokenStore["key: refresh_token:{token}<br/>value: user_email<br/>TTL: 30d"]
         end
 
         subgraph AuthDBCtr["auth-db (PostgreSQL 16, port 5432)"]
@@ -209,10 +317,10 @@ flowchart TB
 
 ---
 
-## 3. Repository Structure
+## 4. Repository Structure
 
 ```text
-URL-Shortener/
+Microservice-Auth-Platform/
 ├── .agents/          # Workspace configuration and guidelines
 ├── design/           # Architecture diagrams and design specifications
 │   ├── analytics/    # Analytics service design documentation
@@ -232,15 +340,31 @@ URL-Shortener/
 │   └── run_test_k8s.sh
 ├── services/         # Decoupled microservices architecture
 │   ├── analytics/    # Real-time click tracking & aggregation
-│   ├── auth/         # JWT authentication & user management
-│   ├── gateway/      # Reverse proxy & dynamic request router
+│   ├── auth/         # ★ JWT auth, Google OIDC & user management (core)
+│   ├── gateway/      # Reverse proxy & zero-trust RS256 JWT verification
 │   └── shortener/    # URL encoding, decoding & cache layer
 ├── tests/            # Automated test suites
 │   ├── e2e/          # End-to-end user journey tests
-│   ├── integration/  # Inter-service integration tests
-│   └── unit/         # Unit tests per microservice
+│   ├── integration/  # Inter-service integration tests (Redis token store)
+│   └── unit/         # Unit tests — bcrypt, RS256 JWT, Google OIDC
 ├── .dockerignore
 ├── .gitignore
 ├── pyproject.toml    # Dependency management & pytest config
 └── uv.lock           # Locked dependency lockfile
+```
+
+---
+
+## 5. Running Tests
+
+```bash
+# Unit tests (offline — no Docker required)
+uv run pytest tests/unit/ -v
+
+# Integration tests (requires Redis)
+uv run pytest tests/integration/ -v
+
+# E2E tests (requires full Docker stack)
+docker compose up -d
+uv run pytest tests/e2e/ -v
 ```
