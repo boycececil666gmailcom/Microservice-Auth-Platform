@@ -1,6 +1,6 @@
 # Microservice Authentication Platform
 
-> Production-grade authentication microservice implementing JWT RS256 asymmetric signing, Google OpenID Connect (OIDC), Redis-backed refresh token rotation, and bcrypt password hashing — deployed as an isolated Docker container behind an API Gateway with zero-trust local token verification.
+> Enterprise-grade identity and access control platform built on a decoupled microservice architecture — enabling organizations to secure product features, unify user identities across sign-in providers, and maintain complete session lifecycle control.
 
 ![Python](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat&logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?style=flat&logo=fastapi&logoColor=white)
@@ -14,159 +14,78 @@
 
 ---
 
-## 1. Authentication Architecture & Design Decisions
+## 1. Core Purpose & Business Value
 
-This platform implements a **dual authentication strategy** — local password auth and Google OIDC — unified under a single RS256 JWT schema. The key design decisions are documented below.
+This platform delivers a complete user identity and session management foundation, enabling product teams to ship authenticated features faster while giving security teams full control over who accesses what — and for how long.
 
-### Why RS256 (Asymmetric) Instead of HS256 (Symmetric)?
+- **Frictionless Onboarding & Social Sign-in**: Users can register or sign in using their existing Google accounts with a single click, dramatically reducing sign-up abandonment and increasing conversion rates for consumer-facing products.
+- **Enterprise Account Control & Immediate Access Revocation**: Security teams can instantly invalidate any user session organization-wide — critical for offboarding employees, responding to suspicious activity, or enforcing compliance policies — without requiring users to wait for natural token expiration.
+- **Zero-Trust Feature Protection**: Every product feature behind authentication is protected by a cryptographically verifiable identity check that requires no additional server calls per request, enabling sub-millisecond access decisions at scale without sacrificing security.
+- **Unified Identity Across Sign-in Providers**: Whether a user registers via email/password or Google, the platform issues a single, consistent identity token accepted by all internal services — eliminating fragmented user records and duplicate account issues.
+- **Stateless Horizontal Scalability**: The access verification layer operates entirely without shared state between server instances, allowing the product to scale to any number of concurrent users without bottlenecks in the authentication path.
 
-| Aspect | RS256 (this project) | HS256 |
-|--------|----------------------|-------|
-| Key type | RSA private + public key pair | Single shared secret |
-| Token issuer | Signs with private key (Auth Service only) | Any party with the secret can sign |
-| Token verifier | Verifies with public key (Gateway, any service) | Must share the same secret |
-| Security boundary | Private key never leaves Auth container | Secret must be distributed to all verifiers |
-| **Use case** | **Microservices, federated identity** | Single-service monolith |
+---
 
-> **In this project**: The API Gateway verifies every incoming JWT **locally** using the RS256 public key — zero network round-trips to the Auth Service per request. This is the same model used by Google, Auth0, and AWS Cognito.
+## 2. System Architecture & Technical Execution
 
-### Auth Flow: Login / Sign-up (Dual-Provider)
+The platform separates the identity issuance concern (Auth Service) from the verification concern (API Gateway), enabling stateless horizontal scaling of the request path while centralizing all credential management in a single, auditable service.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
-    participant GW as API Gateway<br/>(RS256 Public Key)
-    participant Auth as Auth Service<br/>(RS256 Private Key)
-    participant PG as PostgreSQL<br/>(users table)
-    participant RD as Redis<br/>(refresh_token:{token} → email)
-
-    Note over C, GW: Path A — Password Authentication (POST /auth/login)
-    C->>GW: POST /auth/login { email, password }
-    GW->>Auth: Forward request (no auth required)
-    Auth->>PG: SELECT password_hash WHERE email = $1
-    alt User not found (Sign-up)
-        Auth->>PG: INSERT INTO users (email, bcrypt_hash, 'local')
-    else User found (Login)
-        Auth->>Auth: bcrypt.checkpw(password, hash)
-    end
-    Auth->>Auth: jwt.encode(payload, RS256_PRIVATE_KEY)
-    Auth->>RD: SET refresh_token:{token} = email  TTL=30d
-    Auth-->>GW: { access_token } + Set-Cookie: refresh_token (HttpOnly)
-    GW-->>C: 200 OK
-
-    Note over C, GW: Path B — Google OIDC (POST /auth/google/callback)
-    C->>GW: POST /auth/google/callback { id_token OR code }
-    GW->>Auth: Forward request
-    Auth->>Auth: base64url.decode(id_token.payload) → { email, sub }
-    Auth->>PG: SELECT WHERE google_sub=$1 OR email=$2
-    alt New Google user (auto-provision)
-        Auth->>PG: INSERT INTO users (email, 'GOOGLE_OIDC_USER_NO_PASSWORD', 'google_oidc', sub)
-    end
-    Auth->>Auth: jwt.encode(payload, RS256_PRIVATE_KEY)
-    Auth->>RD: SET refresh_token:{token} = email  TTL=30d
-    Auth-->>C: { access_token } + Set-Cookie: refresh_token (HttpOnly)
-```
-
-### Auth Flow: Protected Request Verification (Zero-Trust Gateway)
+### Core Concept & Phased Execution Diagram
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor C as Client
-    participant GW as API Gateway<br/>(RS256 Public Key — in-memory)
-    participant SVC as Internal Service<br/>(Shortener / Analytics)
-
-    C->>GW: GET /api/v1/... Authorization: Bearer <JWT>
-    GW->>GW: jwt.decode(token, RS256_PUBLIC_KEY)<br/>★ No network call to Auth Service
-    alt Valid token
-        GW->>SVC: Forward request (internal Docker network)
-        SVC-->>GW: Response
-        GW-->>C: 200 OK
-    else Expired / Invalid signature
-        GW-->>C: 401 Unauthorized
-    end
-```
-
-### Auth Flow: Refresh Token Rotation
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client
+    actor C as Client App / User
     participant GW as API Gateway
     participant Auth as Auth Service
-    participant RD as Redis
+    participant PG as User Database
+    participant RD as Session Store
 
-    Note over C: Access token expired (15 min TTL)
-    C->>GW: POST /auth/refresh  Cookie: refresh_token=<opaque>
-    GW->>Auth: Forward cookies
-    Auth->>RD: GET refresh_token:{token}  → email
-    alt Token found (valid, not revoked)
-        Auth->>Auth: jwt.encode(new payload, RS256_PRIVATE_KEY)
-        Auth-->>C: { access_token } (new 15-min JWT)
-    else Token missing or expired (30d TTL elapsed)
-        Auth-->>C: 401 — re-login required
+    Note over C, GW: Phase 1: Identity Issuance (Login / Sign-up Path)
+    C->>GW: POST /auth/login { email, password }
+    GW->>Auth: Forward credentials (no token required)
+    Auth->>PG: Lookup user record by email
+    alt New User (Sign-up)
+        rect rgb(235, 247, 238)
+            Auth->>PG: Register new account with hashed credential
+            Auth->>Auth: Sign identity token with private key
+            Auth->>RD: Store session token linked to user identity (TTL 30d)
+            Auth-->>C: Identity token + session cookie (HttpOnly)
+        end
+    else Existing User (Login)
+        rect rgb(235, 247, 238)
+            Auth->>Auth: Verify submitted credential against stored hash
+            Auth->>Auth: Sign identity token with private key
+            Auth->>RD: Store session token linked to user identity (TTL 30d)
+            Auth-->>C: Identity token + session cookie (HttpOnly)
+        end
+    else Invalid Credential
+        rect rgb(253, 237, 237)
+            Auth-->>C: 401 Unauthorized
+        end
     end
 
-    Note over C: Logout
-    C->>GW: POST /auth/logout  Cookie: refresh_token=<opaque>
-    GW->>Auth: Forward cookies
-    Auth->>RD: DEL refresh_token:{token}  ★ Immediate revocation
-    Auth-->>C: 200 + Set-Cookie: refresh_token="" (cleared)
+    Note over C, GW: Phase 2: Protected Resource Access (Zero-Trust Verification Path)
+    C->>GW: GET /api/v1/resource  Authorization: Bearer token
+    GW->>GW: Verify token signature with public key (in-memory, no network call)
+    alt Valid Token
+        rect rgb(235, 247, 238)
+            GW->>GW: Extract identity claims from token payload
+            GW-->>C: 200 OK with resource data
+        end
+    else Invalid or Expired Token
+        rect rgb(253, 237, 237)
+            GW-->>C: 401 Unauthorized
+        end
+    end
+
+    Note over C, Auth: Phase 3: Session Renewal & Revocation (Background Lifecycle)
+    C-)+Auth: POST /auth/refresh  Cookie: session_token
+    Auth->>RD: Lookup session token -> user identity
+    Auth->>Auth: Issue new short-lived identity token
+    Auth-->>C: New identity token
+    deactivate Auth
 ```
-
----
-
-## 2. Auth Service Implementation
-
-### Core Modules
-
-| Module | Responsibility |
-|--------|---------------|
-| `services/auth/main.py` | FastAPI app — login, refresh, logout, Google OIDC endpoints |
-| `services/auth/tokens.py` | `create_access_token()` (RS256 JWT), `generate_refresh_token()` (opaque), Redis store/get/delete |
-| `services/auth/passwords.py` | `hash_password()` (bcrypt), `verify_password()` (bcrypt.checkpw) |
-| `services/auth/oidc.py` | `build_google_auth_url()`, `exchange_code_for_id_token()`, `parse_google_id_token()` |
-| `services/auth/database.py` | asyncpg connection pool, `init_users_table()` (auto-migration) |
-| `services/auth/config.py` | ENV-driven config: RSA keys, Redis URL, OIDC credentials, TTL constants |
-| `services/gateway/main.py` | `verify_token()` — pure in-memory RS256 public key JWT decode (no auth service call) |
-
-### JWT Payload Schema
-
-```json
-{
-  "sub": "user@example.com",
-  "email": "user@example.com",
-  "sso_provider": "local | google_oidc",
-  "iat": 1700000000,
-  "exp": 1700000900
-}
-```
-
-### PostgreSQL `users` Table Schema
-
-```sql
-CREATE TABLE IF NOT EXISTS users (
-    email         VARCHAR(255) PRIMARY KEY,
-    password_hash VARCHAR(255) NOT NULL,
-    sso_provider  VARCHAR(50)  DEFAULT 'local',
-    google_sub    VARCHAR(255),
-    created_at    TIMESTAMPTZ  DEFAULT NOW()
-);
-```
-
-### Redis Refresh Token Schema
-
-```
-Key:   refresh_token:{64-byte-urlsafe-random-token}
-Value: user@example.com
-TTL:   2,592,000 seconds (30 days)
-```
-
----
-
-## 3. System Architecture
 
 ### High-Level Target Production Architecture Diagram
 
@@ -188,32 +107,33 @@ flowchart TB
     end
 
     subgraph WritePath["Write Path"]
-        APIGW["API Gateway<br/>(FastAPI)"]
+        APIGW["API Gateway<br/>(FastAPI + Uvicorn)<br/>RS256 Public Key Verification"]
     end
 
     subgraph ReadPath["Read Path"]
-        Redirect["API Gateway<br/>(FastAPI)"]
+        Redirect["API Gateway<br/>(FastAPI + Uvicorn)<br/>RS256 Public Key Verification"]
     end
 
     subgraph AuthSvc["Auth Service"]
-        Auth["Auth Handler<br/>(RS256 Private Key)"]
+        Auth["Auth Handler<br/>(RS256 Private Key Signing)<br/>Google OIDC + Local Auth"]
         subgraph AuthDB["Owned Storage"]
             UserDB[("User DB<br/>(PostgreSQL)")]
+            AuthRedis["Session Store<br/>(Redis)<br/>refresh_token:{token} TTL 30d"]
         end
     end
 
     subgraph ShortenerSvc["Shortener Service"]
         Shortener["Shortener Handler<br/>(FastAPI + Uvicorn)"]
         subgraph ShortenerDB["Owned Storage"]
-            Redis["Cache<br/>(Redis)"]
+            Redis["Cache<br/>(Redis)<br/>url:{id} TTL 24h"]
             Primary[("Primary DB<br/>(PostgreSQL)")]
             Replica[("Replica DB<br/>(PostgreSQL)")]
         end
     end
 
     subgraph Async
-        Queue["Queue<br/>(Kafka / RabbitMQ / SQS)"]
-        Analytics["Analytics Service<br/>(ClickHouse / Elasticsearch)"]
+        Queue["Queue<br/>(Apache Kafka)"]
+        Analytics["Analytics Service<br/>(FastAPI + Uvicorn)"]
     end
 
     User --> APIGW
@@ -221,6 +141,7 @@ flowchart TB
     APIGW --> Shortener
 
     Auth --> UserDB
+    Auth --> AuthRedis
 
     Shortener --> Redis
     Shortener --> Primary
@@ -232,7 +153,6 @@ flowchart TB
     LB --> Redirect
 
     Redirect --> Shortener
-
     Redirect --> Queue
     Queue --> Analytics
 ```
@@ -268,7 +188,8 @@ flowchart TB
             LoginH["POST /auth/login"]
             RefreshH["POST /auth/refresh"]
             LogoutH["POST /auth/logout"]
-            GoogleH["GET  /auth/google/login<br/>POST /auth/google/callback"]
+            GoogleLoginH["GET  /auth/google/login"]
+            GoogleCbH["POST /auth/google/callback"]
         end
 
         subgraph AnalyticsCtr["analytics (FastAPI + Uvicorn, port 8003)"]
@@ -313,15 +234,16 @@ flowchart TB
     LoginH -->|"SET refresh_token:{token}"| TokenStore
     RefreshH -->|"GET refresh_token:{token}"| TokenStore
     LogoutH -->|"DEL refresh_token:{token}"| TokenStore
+    GoogleCbH -->|"SELECT / INSERT"| UserPG
+    GoogleCbH -->|"SET refresh_token:{token}"| TokenStore
 ```
 
 ---
 
-## 4. Repository Structure
+## 3. Repository Structure
 
 ```text
 Microservice-Auth-Platform/
-├── .agents/          # Workspace configuration and guidelines
 ├── design/           # Architecture diagrams and design specifications
 │   ├── analytics/    # Analytics service design documentation
 │   ├── auth/         # Authentication service design documentation
@@ -332,39 +254,29 @@ Microservice-Auth-Platform/
 │   ├── main.tf       # Terraform provider configuration
 │   ├── outputs.tf    # Infrastructure output definitions
 │   └── variables.tf  # Environment variable declarations
-├── keys/             # RSA public/private keys for JWT verification
 ├── scripts/          # Automation build and deployment scripts
 │   ├── 01_build_images.sh
 │   ├── 02_deploy_tf.sh
 │   ├── 03_run_tests.sh
 │   └── run_test_k8s.sh
 ├── services/         # Decoupled microservices architecture
-│   ├── analytics/    # Real-time click tracking & aggregation
-│   ├── auth/         # ★ JWT auth, Google OIDC & user management (core)
-│   ├── gateway/      # Reverse proxy & zero-trust RS256 JWT verification
-│   └── shortener/    # URL encoding, decoding & cache layer
+│   ├── analytics/    # Real-time click tracking & aggregation (Kafka consumer)
+│   ├── auth/         # Identity issuance — JWT RS256, Google OIDC, session lifecycle
+│   │   ├── config.py     # ENV-driven config: RSA keys, Redis URL, OIDC credentials
+│   │   ├── database.py   # asyncpg connection pool & auto-migration
+│   │   ├── main.py       # FastAPI app — login, refresh, logout, Google OIDC
+│   │   ├── oidc.py       # Google OAuth2 URL builder, ID token parser & mock fixtures
+│   │   ├── passwords.py  # bcrypt hash & verify
+│   │   ├── schemas.py    # Pydantic request/response models
+│   │   └── tokens.py     # RS256 JWT creation, opaque refresh token, Redis store
+│   ├── gateway/      # Reverse proxy — RS256 public key verification (zero network call)
+│   └── shortener/    # URL encoding, decoding & Redis cache-aside layer
 ├── tests/            # Automated test suites
-│   ├── e2e/          # End-to-end user journey tests
+│   ├── e2e/          # End-to-end user journey tests (full Docker stack)
 │   ├── integration/  # Inter-service integration tests (Redis token store)
-│   └── unit/         # Unit tests — bcrypt, RS256 JWT, Google OIDC
+│   └── unit/         # Unit tests — bcrypt, RS256 JWT, Google OIDC token parsing
 ├── .dockerignore
 ├── .gitignore
 ├── pyproject.toml    # Dependency management & pytest config
 └── uv.lock           # Locked dependency lockfile
-```
-
----
-
-## 5. Running Tests
-
-```bash
-# Unit tests (offline — no Docker required)
-uv run pytest tests/unit/ -v
-
-# Integration tests (requires Redis)
-uv run pytest tests/integration/ -v
-
-# E2E tests (requires full Docker stack)
-docker compose up -d
-uv run pytest tests/e2e/ -v
 ```
