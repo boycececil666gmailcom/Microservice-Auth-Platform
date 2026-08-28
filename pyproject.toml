@@ -15,3 +15,9 @@ dependencies = [
 [tool.pytest.ini_options]
 python_files = ["ut_*.py", "it_*.py", "e2e_*.py", "test_*.py"]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
+]

@@ -39,25 +39,25 @@ sequenceDiagram
     participant GW as API Gateway
     participant Auth as Auth Service
     participant PG as User Database
-    participant RD as Session Store
+    participant RD as Session Store (Redis)
 
-    Note over C, GW: Phase 1: Identity Issuance (Login / Sign-up Path)
+    Note over C,RD: Phase 1: Login / Sign-up and Token Issuance
     C->>GW: POST /auth/login { email, password }
     GW->>Auth: Forward credentials (no token required)
     Auth->>PG: Lookup user record by email
     alt New User (Sign-up)
         rect rgb(235, 247, 238)
             Auth->>PG: Register new account with hashed credential
-            Auth->>Auth: Sign identity token with private key
-            Auth->>RD: Store session token linked to user identity (TTL 30d)
-            Auth-->>C: Identity token + session cookie (HttpOnly)
+            Auth->>Auth: Sign short-lived access JWT with RS256 private key (15m)
+            Auth->>RD: SET refresh_token:{opaque token} = email (TTL 30d)
+            Auth-->>C: Access JWT (JSON) + refresh token (HttpOnly cookie)
         end
     else Existing User (Login)
         rect rgb(235, 247, 238)
             Auth->>Auth: Verify submitted credential against stored hash
-            Auth->>Auth: Sign identity token with private key
-            Auth->>RD: Store session token linked to user identity (TTL 30d)
-            Auth-->>C: Identity token + session cookie (HttpOnly)
+            Auth->>Auth: Sign short-lived access JWT with RS256 private key (15m)
+            Auth->>RD: SET refresh_token:{opaque token} = email (TTL 30d)
+            Auth-->>C: Access JWT (JSON) + refresh token (HttpOnly cookie)
         end
     else Invalid Credential
         rect rgb(253, 237, 237)
@@ -65,26 +65,42 @@ sequenceDiagram
         end
     end
 
-    Note over C, GW: Phase 2: Protected Resource Access (Zero-Trust Verification Path)
-    C->>GW: GET /api/v1/resource  Authorization: Bearer token
-    GW->>GW: Verify token signature with public key (in-memory, no network call)
-    alt Valid Token
+    Note over C,GW: Phase 2: Protected API Access (Stateless Verification)
+    C->>GW: GET /api/v1/resource<br/>Authorization: Bearer [access JWT]
+    GW->>GW: Verify RS256 signature and expiry with public key
+    alt Access JWT is valid
         rect rgb(235, 247, 238)
-            GW->>GW: Extract identity claims from token payload
-            GW-->>C: 200 OK with resource data
+            GW->>GW: Extract trusted identity claims (sub, email, provider)
+            GW-->>C: Forward request / return protected resource
         end
-    else Invalid or Expired Token
+    else Access JWT is invalid or expired
         rect rgb(253, 237, 237)
             GW-->>C: 401 Unauthorized
         end
     end
 
-    Note over C, Auth: Phase 3: Session Renewal & Revocation (Background Lifecycle)
-    C-)+Auth: POST /auth/refresh  Cookie: session_token
-    Auth->>RD: Lookup session token -> user identity
-    Auth->>Auth: Issue new short-lived identity token
-    Auth-->>C: New identity token
-    deactivate Auth
+    Note over C,RD: Phase 3: Access JWT Renewal (Stateful Session Lookup)
+    C->>Auth: POST /auth/refresh<br/>Cookie: refresh_token=[opaque token]
+    Auth->>RD: GET refresh_token:{opaque token}
+    alt Refresh token exists and has not expired
+        rect rgb(235, 247, 238)
+            RD-->>Auth: User email
+            Auth->>PG: Confirm user still exists
+            Auth->>Auth: Sign new short-lived access JWT (15m)
+            Auth-->>C: New access JWT (refresh token unchanged)
+        end
+    else Missing, revoked, or expired
+        rect rgb(253, 237, 237)
+            RD-->>Auth: Not found
+            Auth-->>C: 401 Unauthorized (login required)
+        end
+    end
+
+    Note over C,RD: Phase 4: Logout / Session Revocation
+    C->>Auth: POST /auth/logout<br/>Cookie: refresh_token=[opaque token]
+    Auth->>RD: DEL refresh_token:{opaque token}
+    Auth-->>C: Clear refresh-token cookie
+    Note over C,Auth: Existing access JWT may remain valid for up to 15 minutes
 ```
 
 ### High-Level Target Production Architecture Diagram
