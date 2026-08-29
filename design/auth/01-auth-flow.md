@@ -53,15 +53,11 @@ sequenceDiagram
     participant PG as User DB (Postgres)
     participant R as Session Store (Redis)
 
-    Note over C,GO: Phase 1: Start Authorization Code Flow
-    C->>G: GET /auth/google/login
-    G->>A: Forward request
-    A->>A: Generate state token (client must validate on callback)
-    A-->>G: { auth_url, state }
-    G-->>C: { auth_url, state }
+    Note over C,GO: Phase 1: Client Direct Authorization Initiation
+    C->>C: Generate random state token in browser (sessionStorage)
+    C->>GO: Open Google OAuth URL directly<br/>scope: openid email profile & state
 
     Note over C,GO: Phase 2: Google Authentication and Consent
-    C->>GO: Open authorization URL<br/>scope: openid email profile
     alt User authenticates and grants consent
         rect rgb(235, 247, 238)
             GO-->>C: Redirect with authorization code and state
@@ -73,6 +69,7 @@ sequenceDiagram
     end
 
     Note over C,GO: Phase 3: Callback and Google Token Exchange
+    C->>C: Validate returned state against stored state
     C->>G: POST /auth/google/callback { code, state }
     G->>A: Forward callback request
     A->>GO: POST /token { code, client credentials, redirect_uri }

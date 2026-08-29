@@ -30,79 +30,6 @@ This platform delivers a complete user identity and session management foundatio
 
 The platform separates the identity issuance concern (Auth Service) from the verification concern (API Gateway), enabling stateless horizontal scaling of the request path while centralizing all credential management in a single, auditable service.
 
-### Core Concept & Phased Execution Diagram
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor C as Client App / User
-    participant GW as API Gateway
-    participant Auth as Auth Service
-    participant PG as User Database
-    participant RD as Session Store (Redis)
-
-    Note over C,RD: Phase 1: Login / Sign-up and Token Issuance
-    C->>GW: POST /auth/login { email, password }
-    GW->>Auth: Forward credentials (no token required)
-    Auth->>PG: Lookup user record by email
-    alt New User (Sign-up)
-        rect rgb(235, 247, 238)
-            Auth->>PG: Register new account with hashed credential
-            Auth->>Auth: Sign short-lived access JWT with RS256 private key (15m)
-            Auth->>RD: SET refresh_token:{opaque token} = email (TTL 30d)
-            Auth-->>C: Access JWT (JSON) + refresh token (HttpOnly cookie)
-        end
-    else Existing User (Login)
-        rect rgb(235, 247, 238)
-            Auth->>Auth: Verify submitted credential against stored hash
-            Auth->>Auth: Sign short-lived access JWT with RS256 private key (15m)
-            Auth->>RD: SET refresh_token:{opaque token} = email (TTL 30d)
-            Auth-->>C: Access JWT (JSON) + refresh token (HttpOnly cookie)
-        end
-    else Invalid Credential
-        rect rgb(253, 237, 237)
-            Auth-->>C: 401 Unauthorized
-        end
-    end
-
-    Note over C,GW: Phase 2: Protected API Access (Stateless Verification)
-    C->>GW: GET /api/v1/resource<br/>Authorization: Bearer [access JWT]
-    GW->>GW: Verify RS256 signature and expiry with public key
-    alt Access JWT is valid
-        rect rgb(235, 247, 238)
-            GW->>GW: Extract trusted identity claims (sub, email, provider)
-            GW-->>C: Forward request / return protected resource
-        end
-    else Access JWT is invalid or expired
-        rect rgb(253, 237, 237)
-            GW-->>C: 401 Unauthorized
-        end
-    end
-
-    Note over C,RD: Phase 3: Access JWT Renewal (Stateful Session Lookup)
-    C->>Auth: POST /auth/refresh<br/>Cookie: refresh_token=[opaque token]
-    Auth->>RD: GET refresh_token:{opaque token}
-    alt Refresh token exists and has not expired
-        rect rgb(235, 247, 238)
-            RD-->>Auth: User email
-            Auth->>PG: Confirm user still exists
-            Auth->>Auth: Sign new short-lived access JWT (15m)
-            Auth-->>C: New access JWT (refresh token unchanged)
-        end
-    else Missing, revoked, or expired
-        rect rgb(253, 237, 237)
-            RD-->>Auth: Not found
-            Auth-->>C: 401 Unauthorized (login required)
-        end
-    end
-
-    Note over C,RD: Phase 4: Logout / Session Revocation
-    C->>Auth: POST /auth/logout<br/>Cookie: refresh_token=[opaque token]
-    Auth->>RD: DEL refresh_token:{opaque token}
-    Auth-->>C: Clear refresh-token cookie
-    Note over C,Auth: Existing access JWT may remain valid for up to 15 minutes
-```
-
 ### High-Level Target Production Architecture Diagram
 
 ```mermaid
@@ -204,7 +131,6 @@ flowchart TB
             LoginH["POST /auth/login"]
             RefreshH["POST /auth/refresh"]
             LogoutH["POST /auth/logout"]
-            GoogleLoginH["GET  /auth/google/login"]
             GoogleCbH["POST /auth/google/callback"]
         end
 

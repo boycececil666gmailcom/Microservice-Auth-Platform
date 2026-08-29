@@ -2,7 +2,6 @@
 End-to-End Tests for Google OpenID Connect (OIDC) Integration (e2e_google_oidc.py).
 
 Tests:
-  - GET /auth/google/login returns valid OAuth2 authorization URL via Gateway
   - POST /auth/google/callback auto-provisions Google user, returns RS256 JWT & refresh cookie
   - Accessing protected /api/v1/shorten using Google-issued RS256 JWT succeeds
 """
@@ -17,16 +16,6 @@ GATEWAY_URL = "http://localhost:8000"
 
 
 # region End-to-End Tests
-def test_google_login_auth_url_endpoint():
-    """Verify GET /auth/google/login returns Google OAuth 2.0 authorization URL via Gateway."""
-    resp = requests.get(f"{GATEWAY_URL}/auth/google/login")
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "auth_url" in data
-    assert "state" in data
-    assert "https://accounts.google.com/o/oauth2/v2/auth" in data["auth_url"]
-
-
 def test_google_oidc_callback_and_protected_access():
     """Verify POST /auth/google/callback processes Google ID Token, auto-provisions account,
     issues RS256 JWT, and allows shortening URLs via Gateway.

@@ -205,23 +205,6 @@ async def auth_logout(request: Request):
 
 
 # region Google OIDC Proxy Routes
-@app.get("/auth/google/login")
-async def google_login(request: Request):
-    """Forward GET /auth/google/login to the Auth service."""
-    query_string = str(request.url.query)
-    target_url = f"{AUTH_URL}/auth/google/login"
-    if query_string:
-        target_url = f"{target_url}?{query_string}"
-
-    resp = await get_client().get(target_url)
-    _raise_for_upstream_error(resp)
-    return Response(
-        content=resp.content,
-        status_code=resp.status_code,
-        media_type="application/json",
-    )
-
-
 @app.post("/auth/google/callback")
 async def google_callback(request: Request):
     """Forward POST /auth/google/callback to the Auth service."""

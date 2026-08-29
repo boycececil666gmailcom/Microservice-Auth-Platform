@@ -5,7 +5,6 @@ Endpoints:
   POST /auth/login           — Sign up (if user doesn't exist) or login with password.
   POST /auth/refresh         — Exchange a refresh token for a new access token.
   POST /auth/logout          — Revoke the refresh token.
-  GET  /auth/google/login    — Generate Google OAuth 2.0 authorization URL.
   POST /auth/google/callback — Exchange Google ID token / code for RS256 JWT & refresh cookie.
 """
 
@@ -155,12 +154,6 @@ async def logout(
 
 
 # region Google OpenID Connect (OIDC) Endpoints
-@app.get("/auth/google/login")
-async def google_login(state: str | None = None):
-    """Return the Google OAuth 2.0 / OIDC authorization redirect URL and state token."""
-    state_token = state or oidc.generate_state_token()
-    auth_url = oidc.build_google_auth_url(state=state_token)
-    return {"auth_url": auth_url, "state": state_token}
 
 
 @app.post("/auth/google/callback", response_model=TokenResponse)
