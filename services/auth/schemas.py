@@ -20,8 +20,7 @@ class TokenResponse(BaseModel):
 
 # region Google OIDC Schemas
 class GoogleCallbackRequest(BaseModel):
-    id_token: str | None = None
-    code: str | None = None
+    code: str
     state: str | None = None
     redirect_uri: str | None = None
 

@@ -20,16 +20,14 @@ def test_google_oidc_callback_and_protected_access():
     """Verify POST /auth/google/callback processes Google ID Token, auto-provisions account,
     issues RS256 JWT, and allows shortening URLs via Gateway.
     """
-    google_email = f"google_user_{uuid.uuid4().hex[:8]}@gmail.com"
-    google_sub = f"google_sub_{uuid.uuid4().hex[:12]}"
-    mock_id_token = build_mock_google_id_token(email=google_email, sub=google_sub)
+    mock_code = f"mock_code_{uuid.uuid4().hex[:8]}"
 
     session = requests.Session()
 
-    # 1. Post Google ID token to OIDC Callback endpoint
+    # 1. Post authorization code to OIDC Callback endpoint
     cb_resp = session.post(
         f"{GATEWAY_URL}/auth/google/callback",
-        json={"id_token": mock_id_token},
+        json={"code": mock_code, "state": "test_state_123"},
     )
     assert cb_resp.status_code == 200, f"Google OIDC Callback failed: {cb_resp.text}"
     cb_data = cb_resp.json()

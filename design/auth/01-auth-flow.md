@@ -104,8 +104,6 @@ sequenceDiagram
 
     A-->>G: Access JWT (JSON) + refresh token (HttpOnly cookie)
     G-->>C: 200 OK
-    Note over C,A: Google ID Token proves the Google identity to Auth Service
-    Note over A,R: Platform access JWT authorizes calls to internal APIs
 ```
 
 ---

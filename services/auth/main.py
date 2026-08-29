@@ -162,27 +162,16 @@ async def google_callback(
     response: Response,
     conn: asyncpg.Connection = Depends(get_db),
 ):
-    """Google OIDC Callback — processes Google ID Token or OAuth Authorization Code.
-
-    Auto-provisions Google user if not registered, and issues signed RS256 JWT
-    access token and refresh token cookie (identical to /auth/login).
+    """Google OIDC Callback — exchanges authorization code with Google for ID token,
+    auto-provisions Google user, and issues signed RS256 JWT access token and refresh cookie.
     """
-    id_token = body.id_token
-
-    if not id_token and body.code:
-        try:
-            id_token = await oidc.exchange_code_for_id_token(
-                code=body.code,
-                redirect_uri=body.redirect_uri or oidc.GOOGLE_REDIRECT_URI,
-            )
-        except ValueError as err:
-            raise HTTPException(status_code=400, detail=f"Google Code Exchange failed: {err}")
-
-    if not id_token:
-        raise HTTPException(
-            status_code=400,
-            detail="Missing Google authentication payload (provide either 'id_token' or 'code')",
+    try:
+        id_token = await oidc.exchange_code_for_id_token(
+            code=body.code,
+            redirect_uri=body.redirect_uri or oidc.GOOGLE_REDIRECT_URI,
         )
+    except ValueError as err:
+        raise HTTPException(status_code=400, detail=f"Google Code Exchange failed: {err}")
 
     try:
         user_info = oidc.parse_google_id_token(id_token)
