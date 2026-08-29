@@ -1,6 +1,6 @@
 import asyncpg
-from .config import DATABASE_URL
 
+from .config import DATABASE_URL
 
 # A connection pool is created once at startup and shared across all requests.
 pool: asyncpg.Pool | None = None
@@ -24,7 +24,7 @@ async def get_db() -> asyncpg.Connection:
         yield conn
 
 
-#region Database Migration & Schema Setup
+# region Database Migration & Schema Setup
 async def init_users_table() -> None:
     """Ensure the users table with email PRIMARY KEY exists in PostgreSQL."""
     async with pool.acquire() as conn:
@@ -37,4 +37,6 @@ async def init_users_table() -> None:
                 created_at    TIMESTAMPTZ  DEFAULT NOW()
             );
         """)
-#endregion
+
+
+# endregion

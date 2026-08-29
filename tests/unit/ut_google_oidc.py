@@ -9,10 +9,11 @@ Tests:
 """
 
 import pytest
+
 from services.auth import oidc
 
 
-#region Unit Tests
+# region Unit Tests
 def test_build_google_auth_url():
     """Verify Google OAuth 2.0 authorization URL contains expected parameters."""
     url = oidc.build_google_auth_url(state="custom_state_456")
@@ -66,5 +67,6 @@ def test_parse_missing_claims_raises_value_error():
     invalid_token = '{"name": "No Sub User"}'
     with pytest.raises(ValueError, match="missing required 'email' or 'sub' claims"):
         oidc.parse_google_id_token(invalid_token)
-#endregion
 
+
+# endregion

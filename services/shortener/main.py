@@ -13,11 +13,11 @@ from .crud import create_new_unique_long_url, get_url_by_id
 from .database import close_pool, create_db_pool, get_db
 from .schemas import ShortenRequest, URLCreateResponse, URLLookupResponse
 
-
-#region Configuration & Lifespan
+# region Configuration & Lifespan
 KAFKA_BROKER_URL = os.environ.get("KAFKA_BROKER_URL", "kafka:9092")
 KAFKA_TOPIC = "url-redirects"
 kafka_producer = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -28,6 +28,7 @@ async def lifespan(app: FastAPI):
 
     # Create the urls table if it doesn't exist yet.
     from .database import pool
+
     async with pool.acquire() as conn:
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS urls (
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI):
     try:
         kafka_producer = AIOKafkaProducer(
             bootstrap_servers=KAFKA_BROKER_URL,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8')
+            value_serializer=lambda v: json.dumps(v).encode("utf-8"),
         )
         await kafka_producer.start()
     except Exception as e:
@@ -56,17 +57,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Shortener Service", version="0.1.0", lifespan=lifespan)
-#endregion
+# endregion
 
 
-#region Health Endpoints
+# region Health Endpoints
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-#endregion
 
 
-#region Write Path Endpoints
+# endregion
+
+
+# region Write Path Endpoints
 @app.post("/shorten", response_model=URLCreateResponse, status_code=201)
 async def shorten_url(
     body: ShortenRequest,
@@ -82,10 +85,12 @@ async def shorten_url(
         long_url=url_row["long_url"],
         created_at=url_row["created_at"],
     )
-#endregion
 
 
-#region Read Path Endpoints
+# endregion
+
+
+# region Read Path Endpoints
 @app.get("/urls/{short_url}", response_model=URLLookupResponse)
 async def get_url(
     short_url: int,
@@ -123,6 +128,7 @@ async def send_analytics_event(short_url: int):
         except Exception as e:
             print(f"Failed to send Kafka event: {e}")
 
+
 @app.get("/r/{short_url}")
 async def redirect(
     short_url: int,
@@ -146,4 +152,6 @@ async def redirect(
     await set_cached_url(url_row)
     asyncio.create_task(send_analytics_event(short_url))
     return RedirectResponse(url=url_row["long_url"], status_code=302)
-#endregion
+
+
+# endregion

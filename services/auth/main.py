@@ -13,11 +13,13 @@ from contextlib import asynccontextmanager
 
 import asyncpg
 from fastapi import Cookie, Depends, FastAPI, HTTPException, Response
-from . import database, oidc
+
+from . import oidc
 from .database import close_pool, create_db_pool, get_db, init_users_table
 from .passwords import hash_password, verify_password
 from .schemas import GoogleCallbackRequest, LoginRequest, TokenResponse
 from .tokens import (
+    REFRESH_TOKEN_TTL_SECONDS,
     close_redis_pool,
     create_access_token,
     create_redis_pool,
@@ -25,11 +27,10 @@ from .tokens import (
     generate_refresh_token,
     get_email_by_token,
     store_refresh_token,
-    REFRESH_TOKEN_TTL_SECONDS,
 )
 
 
-#region Lifespan & App Setup
+# region Lifespan & App Setup
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Open DB/Redis pools and ensure the users table and Google OIDC columns exist."""
@@ -43,20 +44,24 @@ async def lifespan(app: FastAPI):
 
     await close_pool()
     await close_redis_pool()
-#endregion
+
+
+# endregion
 
 
 app = FastAPI(title="Auth Service", version="0.1.0", lifespan=lifespan)
 
 
-#region Health Endpoints
+# region Health Endpoints
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-#endregion
 
 
-#region Password Authentication Routes
+# endregion
+
+
+# region Password Authentication Routes
 @app.post("/auth/login", response_model=TokenResponse)
 async def login(
     body: LoginRequest,
@@ -144,10 +149,12 @@ async def logout(
 
     response.delete_cookie(key="refresh_token", path="/")
     return {"detail": "Logged out"}
-#endregion
 
 
-#region Google OpenID Connect (OIDC) Endpoints
+# endregion
+
+
+# region Google OpenID Connect (OIDC) Endpoints
 @app.get("/auth/google/login")
 async def google_login(state: str | None = None):
     """Return the Google OAuth 2.0 / OIDC authorization redirect URL and state token."""
@@ -224,4 +231,6 @@ async def google_callback(
     )
 
     return TokenResponse(access_token=access_token)
-#endregion
+
+
+# endregion

@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+
 import pytest
 import requests
 
@@ -111,7 +112,9 @@ def test_retrieve_long_url(authenticated_session):
     session, access_token = authenticated_session
     long_url = f"https://example.com/retrieve-{uuid.uuid4()}"
     headers = {"Authorization": f"Bearer {access_token}"}
-    create_resp = session.post(f"{GATEWAY_URL}/api/v1/shorten", json={"long_url": long_url}, headers=headers)
+    create_resp = session.post(
+        f"{GATEWAY_URL}/api/v1/shorten", json={"long_url": long_url}, headers=headers
+    )
     short_url_id = create_resp.json()["short_url"]
 
     # Act
@@ -141,7 +144,9 @@ def test_public_redirect_and_analytics(authenticated_session):
     except requests.RequestException:
         pytest.skip("Analytics service unreachable in environment")
 
-    create_resp = session.post(f"{GATEWAY_URL}/api/v1/shorten", json={"long_url": long_url}, headers=headers)
+    create_resp = session.post(
+        f"{GATEWAY_URL}/api/v1/shorten", json={"long_url": long_url}, headers=headers
+    )
     short_url_id = create_resp.json()["short_url"]
 
     # Act 2: Perform 302 redirect
@@ -173,4 +178,4 @@ def test_logout_clears_refresh_token(http_session, user_credentials):
     # Assert
     assert response.status_code == 200
     cookies = http_session.cookies.get_dict()
-    assert "refresh_token" not in cookies or cookies["refresh_token"] in ('""', '')
+    assert "refresh_token" not in cookies or cookies["refresh_token"] in ('""', "")

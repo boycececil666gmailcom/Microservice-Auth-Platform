@@ -8,14 +8,15 @@ Tests:
 """
 
 import uuid
-import pytest
+
 import requests
+
 from services.auth.oidc import build_mock_google_id_token
 
 GATEWAY_URL = "http://localhost:8000"
 
 
-#region End-to-End Tests
+# region End-to-End Tests
 def test_google_login_auth_url_endpoint():
     """Verify GET /auth/google/login returns Google OAuth 2.0 authorization URL via Gateway."""
     resp = requests.get(f"{GATEWAY_URL}/auth/google/login")
@@ -73,5 +74,6 @@ def test_google_oidc_code_callback_flow():
     cb_data = cb_resp.json()
     assert "access_token" in cb_data
     assert "refresh_token" in session.cookies
-#endregion
 
+
+# endregion

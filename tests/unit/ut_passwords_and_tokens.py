@@ -1,12 +1,9 @@
-import pytest
 import jwt
-from pathlib import Path
-from services.auth.passwords import hash_password, verify_password
+import pytest
 
 from services.auth.config import JWT_PRIVATE_KEY
+from services.auth.passwords import hash_password, verify_password
 from services.gateway.config import JWT_PUBLIC_KEY
-
-
 
 
 def test_hash_password_and_verification_success():
@@ -36,11 +33,12 @@ def test_verify_password_invalid_credentials():
     assert result is False
 
 
-#region Password and Token Unit Tests
+# region Password and Token Unit Tests
 def test_rs256_token_creation_and_decoding():
     """Verify RS256 JWT encoding with private key and decoding with public key."""
     # Arrange
     from services.auth.tokens import create_access_token
+
     test_email = "alice@example.com"
 
     # Act
@@ -52,7 +50,9 @@ def test_rs256_token_creation_and_decoding():
     assert decoded["sub"] == test_email
     assert decoded["email"] == test_email
     assert decoded["sso_provider"] == "google_oidc"
-#endregion
+
+
+# endregion
 
 
 def test_invalid_jwt_signature_rejection():
@@ -64,4 +64,3 @@ def test_invalid_jwt_signature_rejection():
     # Act & Assert
     with pytest.raises(jwt.PyJWTError):
         jwt.decode(tampered_token, JWT_PUBLIC_KEY, algorithms=["RS256"])
-

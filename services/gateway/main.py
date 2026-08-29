@@ -10,20 +10,21 @@ Responsibilities:
 No business logic lives here.
 """
 
-import os
 from contextlib import asynccontextmanager
 
 import httpx
 import jwt
-from fastapi import FastAPI, HTTPException, Request, Response, Depends
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 
+from .config import (
+    ANALYTICS_URL,
+    AUTH_URL,
+    JWT_ALGORITHM,
+    JWT_PUBLIC_KEY,
+    SHORTENER_URL,
+)
 
-from . import config
-from .config import ANALYTICS_URL, AUTH_URL, JWT_ALGORITHM, JWT_PUBLIC_KEY, SHORTENER_URL
-
-
-
-#region HTTP Client Lifespan
+# region HTTP Client Lifespan
 _http_client: httpx.AsyncClient | None = None
 
 
@@ -40,11 +41,14 @@ def get_client() -> httpx.AsyncClient:
     if _http_client is None:
         raise RuntimeError("HTTP client not initialised")
     return _http_client
-#endregion
 
 
-#region FastAPI App & Security Middleware
+# endregion
+
+
+# region FastAPI App & Security Middleware
 app = FastAPI(title="API Gateway", version="0.1.0", lifespan=lifespan)
+
 
 async def verify_token(request: Request) -> dict:
     """Verify JWT access token locally using the RS256 public key.
@@ -61,17 +65,21 @@ async def verify_token(request: Request) -> dict:
         return payload
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
-#endregion
 
 
-#region Health Endpoints
+# endregion
+
+
+# region Health Endpoints
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-#endregion
 
 
-#region Write Path Endpoints
+# endregion
+
+
+# region Write Path Endpoints
 @app.post("/api/v1/shorten", status_code=201)
 async def shorten_url(request: Request, token: dict = Depends(verify_token)):
     """Forward POST /api/v1/shorten to the Shortener service."""
@@ -90,10 +98,12 @@ async def shorten_url(request: Request, token: dict = Depends(verify_token)):
         status_code=resp.status_code,
         media_type="application/json",
     )
-#endregion
 
 
-#region Read Path Endpoints
+# endregion
+
+
+# region Read Path Endpoints
 @app.get("/api/v1/urls/{short_url}")
 async def get_url(short_url: int, token: dict = Depends(verify_token)):
     """Forward GET /api/v1/urls/{short_url} to the Shortener service."""
@@ -131,10 +141,12 @@ async def redirect(short_url: int):
         status_code=resp.status_code,
         headers=dict(resp.headers),
     )
-#endregion
 
 
-#region Auth Proxy Routes
+# endregion
+
+
+# region Auth Proxy Routes
 @app.post("/auth/login")
 async def auth_login(request: Request):
     """Forward POST /auth/login to the Auth service."""
@@ -187,10 +199,12 @@ async def auth_logout(request: Request):
         media_type="application/json",
         headers=dict(resp.headers),
     )
-#endregion
 
 
-#region Google OIDC Proxy Routes
+# endregion
+
+
+# region Google OIDC Proxy Routes
 @app.get("/auth/google/login")
 async def google_login(request: Request):
     """Forward GET /auth/google/login to the Auth service."""
@@ -206,7 +220,6 @@ async def google_login(request: Request):
         status_code=resp.status_code,
         media_type="application/json",
     )
-
 
 
 @app.post("/auth/google/callback")
@@ -225,10 +238,12 @@ async def google_callback(request: Request):
         media_type="application/json",
         headers=dict(resp.headers),
     )
-#endregion
 
 
-#region Helper Functions
+# endregion
+
+
+# region Helper Functions
 def _raise_for_upstream_error(resp: httpx.Response) -> None:
     """Re-raise 4xx/5xx responses from upstream as FastAPI HTTPExceptions."""
     if resp.status_code >= 400:
@@ -237,4 +252,6 @@ def _raise_for_upstream_error(resp: httpx.Response) -> None:
         except Exception:
             detail = resp.text
         raise HTTPException(status_code=resp.status_code, detail=detail)
-#endregion
+
+
+# endregion

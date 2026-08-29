@@ -1,4 +1,5 @@
 import os
+
 import asyncpg
 
 # Read the connection string injected by k8s ConfigMap (or a local .env).

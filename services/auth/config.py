@@ -4,14 +4,13 @@ Auth Service Configuration Module — loads, validates, and manages environment 
 
 import os
 
-
-#region Database & Redis Configuration
+# region Database & Redis Configuration
 DATABASE_URL = os.environ.get("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/auth")
 REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
-#endregion
+# endregion
 
 
-#region JWT Token Configuration
+# region JWT Token Configuration
 JWT_ALGORITHM = "RS256"
 JWT_EXPIRATION_MINUTES = int(os.environ.get("JWT_EXPIRATION_MINUTES", "15"))
 REFRESH_TOKEN_TTL_SECONDS = int(os.environ.get("REFRESH_TOKEN_TTL_SECONDS", str(60 * 60 * 24 * 30)))
@@ -51,14 +50,16 @@ if not JWT_PRIVATE_KEY:
         "zGrvBAmJ/R/G2UVqyd9d5NE=\n"
         "-----END PRIVATE KEY-----\n"
     )
-#endregion
+# endregion
 
 
-#region Google OpenID Connect (OIDC) Configuration
-GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "mock-google-client-id.apps.googleusercontent.com")
+# region Google OpenID Connect (OIDC) Configuration
+GOOGLE_CLIENT_ID = os.environ.get(
+    "GOOGLE_CLIENT_ID", "mock-google-client-id.apps.googleusercontent.com"
+)
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "mock-google-client-secret")
 GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost/auth/google/callback")
 
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
-#endregion
+# endregion

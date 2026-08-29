@@ -4,15 +4,14 @@ API Gateway Configuration Module — loads and validates environment variables.
 
 import os
 
-
-#region Upstream Service URLs
+# region Upstream Service URLs
 SHORTENER_URL = os.environ.get("SHORTENER_URL", "http://shortener:8001")
 AUTH_URL = os.environ.get("AUTH_URL", "http://auth:8002")
 ANALYTICS_URL = os.environ.get("ANALYTICS_URL", "http://analytics:8003")
-#endregion
+# endregion
 
 
-#region JWT Public Key Configuration
+# region JWT Public Key Configuration
 JWT_ALGORITHM = "RS256"
 
 # Support both JWT_PUBLIC_KEY and RSA_PUBLIC_KEY_PEM for flexibility across setups
@@ -31,4 +30,4 @@ if not JWT_PUBLIC_KEY:
         "kwIDAQAB\n"
         "-----END PUBLIC KEY-----\n"
     )
-#endregion
+# endregion

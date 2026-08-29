@@ -1,10 +1,8 @@
-import os
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import redis.asyncio as aioredis
-
 
 from .config import (
     JWT_ALGORITHM,
@@ -14,9 +12,7 @@ from .config import (
     REFRESH_TOKEN_TTL_SECONDS,
 )
 
-
-
-#region Redis Connection Pool
+# region Redis Connection Pool
 redis_pool: aioredis.Redis | None = None
 
 
@@ -30,18 +26,20 @@ async def close_redis_pool() -> None:
     """Close the Redis connection pool. Call this at app shutdown."""
     if redis_pool:
         await redis_pool.aclose()
-#endregion
 
 
-#region Access Token & Refresh Token Management
+# endregion
+
+
+# region Access Token & Refresh Token Management
 def create_access_token(email: str, sso_provider: str = "local") -> str:
     """Create a signed RS256 JWT access token with single universal OIDC schema."""
     payload = {
         "sub": email,
         "email": email,
         "sso_provider": sso_provider,
-        "exp": datetime.now(timezone.utc) + timedelta(minutes=JWT_EXPIRATION_MINUTES),
-        "iat": datetime.now(timezone.utc),
+        "exp": datetime.now(UTC) + timedelta(minutes=JWT_EXPIRATION_MINUTES),
+        "iat": datetime.now(UTC),
     }
     return jwt.encode(payload, JWT_PRIVATE_KEY, algorithm=JWT_ALGORITHM)
 
@@ -73,8 +71,9 @@ async def get_email_by_token(token: str) -> str | None:
     return await redis_pool.get(_token_key(token))
 
 
-
 async def delete_refresh_token(token: str) -> None:
     """Revoke a refresh token by removing it from Redis."""
     await redis_pool.delete(_token_key(token))
-#endregion
+
+
+# endregion

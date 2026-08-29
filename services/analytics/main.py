@@ -14,12 +14,10 @@ KAFKA_BROKER_URL = os.environ.get("KAFKA_BROKER_URL", "kafka:9092")
 KAFKA_TOPIC = "url-redirects"
 
 # In-memory counter for analytics
-analytics_data = {
-    "total_redirects": 0,
-    "redirects_by_short_url": {}
-}
+analytics_data = {"total_redirects": 0, "redirects_by_short_url": {}}
 
 consumer_task = None
+
 
 async def consume_events():
     """Background task to consume events from Kafka."""
@@ -28,9 +26,9 @@ async def consume_events():
         bootstrap_servers=KAFKA_BROKER_URL,
         group_id="analytics-group",
         value_deserializer=lambda m: json.loads(m.decode("utf-8")),
-        auto_offset_reset="earliest"
+        auto_offset_reset="earliest",
     )
-    
+
     # Wait for Kafka to be ready
     for i in range(10):
         try:
@@ -48,16 +46,18 @@ async def consume_events():
         async for msg in consumer:
             event = msg.value
             logger.info(f"Received event: {event}")
-            
+
             # Update analytics data
             analytics_data["total_redirects"] += 1
             short_url = event.get("short_url")
             if short_url:
-                analytics_data["redirects_by_short_url"][short_url] = \
+                analytics_data["redirects_by_short_url"][short_url] = (
                     analytics_data["redirects_by_short_url"].get(short_url, 0) + 1
-                    
+                )
+
     finally:
         await consumer.stop()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -73,11 +73,14 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
+
 app = FastAPI(title="Analytics Service", version="0.1.0", lifespan=lifespan)
+
 
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
 
 @app.get("/stats")
 async def get_stats():

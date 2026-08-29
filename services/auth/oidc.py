@@ -5,12 +5,11 @@ generation, ID token decoding/validation, and user claims parsing.
 
 import base64
 import json
-import os
 import secrets
 import time
 from urllib.parse import urlencode
-import httpx
 
+import httpx
 
 from .config import (
     GOOGLE_AUTH_ENDPOINT,
@@ -21,8 +20,7 @@ from .config import (
 )
 
 
-
-#region Authorization URL & State Helper
+# region Authorization URL & State Helper
 def generate_state_token() -> str:
     """Generate a cryptographically secure random state token for CSRF mitigation."""
     return secrets.token_urlsafe(32)
@@ -47,10 +45,12 @@ def build_google_auth_url(
         "prompt": "consent",
     }
     return f"{GOOGLE_AUTH_ENDPOINT}?{urlencode(params)}"
-#endregion
 
 
-#region OAuth 2.0 Authorization Code Exchange
+# endregion
+
+
+# region OAuth 2.0 Authorization Code Exchange
 async def exchange_code_for_id_token(
     code: str,
     redirect_uri: str = GOOGLE_REDIRECT_URI,
@@ -90,10 +90,12 @@ async def exchange_code_for_id_token(
         if not id_token:
             raise ValueError("Google token endpoint response did not include 'id_token'")
         return id_token
-#endregion
 
 
-#region Google ID Token Parser & Validator
+# endregion
+
+
+# region Google ID Token Parser & Validator
 def parse_google_id_token(id_token: str) -> dict:
     """Decode and validate a Google OIDC ID token (JWT format).
 
@@ -139,10 +141,12 @@ def parse_google_id_token(id_token: str) -> dict:
         "picture": payload.get("picture", ""),
         "payload": payload,
     }
-#endregion
 
 
-#region Mock Fixtures for Testing
+# endregion
+
+
+# region Mock Fixtures for Testing
 def build_mock_google_id_token(
     email: str = "user@gmail.com",
     sub: str = "google_user_sub_123456789",
@@ -163,9 +167,17 @@ def build_mock_google_id_token(
         "exp": int(time.time()) + 3600,
     }
 
-    header_b64 = base64.urlsafe_b64encode(json.dumps(header).encode("utf-8")).decode("utf-8").rstrip("=")
-    payload_b64 = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8").rstrip("=")
-    signature_b64 = base64.urlsafe_b64encode(b"mock_google_rsa_signature").decode("utf-8").rstrip("=")
+    header_b64 = (
+        base64.urlsafe_b64encode(json.dumps(header).encode("utf-8")).decode("utf-8").rstrip("=")
+    )
+    payload_b64 = (
+        base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode("utf-8").rstrip("=")
+    )
+    signature_b64 = (
+        base64.urlsafe_b64encode(b"mock_google_rsa_signature").decode("utf-8").rstrip("=")
+    )
 
     return f"{header_b64}.{payload_b64}.{signature_b64}"
-#endregion
+
+
+# endregion

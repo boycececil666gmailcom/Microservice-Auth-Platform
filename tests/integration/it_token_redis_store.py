@@ -1,5 +1,7 @@
-import pytest
 import secrets
+
+import pytest
+
 
 # Mock token storage workflow functions
 def generate_opaque_refresh_token() -> str:
