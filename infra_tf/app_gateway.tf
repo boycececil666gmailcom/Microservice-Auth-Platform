@@ -27,7 +27,7 @@ resource "kubernetes_deployment" "gateway" {
       spec {
         container {
           name              = "gateway"
-          image             = "url-shortener-gateway:v3"
+          image             = "url-shortener-gateway:latest"
           image_pull_policy = "IfNotPresent"
 
           port {

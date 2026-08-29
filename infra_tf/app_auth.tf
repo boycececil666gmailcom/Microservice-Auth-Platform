@@ -27,7 +27,7 @@ resource "kubernetes_deployment" "auth" {
       spec {
         container {
           name              = "auth"
-          image             = "url-shortener-auth:v7"
+          image             = "url-shortener-auth:latest"
           image_pull_policy = "IfNotPresent"
 
           port {
