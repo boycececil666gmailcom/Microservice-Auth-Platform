@@ -33,11 +33,11 @@ def test_generate_state_token():
 
 
 @pytest.mark.asyncio
-async def test_exchange_code_for_id_token():
-    """Verify exchange_code_for_id_token handles mock codes correctly."""
-    id_token = await oidc.exchange_code_for_id_token("mock_code_12345")
-    assert id_token is not None
-    user_info = oidc.parse_google_id_token(id_token)
+async def test_exchange_code_for_jwt_id_token():
+    """Verify exchange_code_for_jwt_id_token handles mock codes correctly."""
+    jwt_id_token = await oidc.exchange_code_for_jwt_id_token(quick_access_code="mock_code_12345")
+    assert jwt_id_token is not None
+    user_info = oidc.parse_google_id_token(jwt_id_token)
     assert "google_sub" in user_info
     assert "email" in user_info
 

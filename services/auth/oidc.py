@@ -51,29 +51,29 @@ def build_google_auth_url(
 
 
 # region OAuth 2.0 Authorization Code Exchange
-async def exchange_code_for_id_token(
-    code: str,
+async def exchange_code_for_jwt_id_token(
+    quick_access_code: str,
     redirect_uri: str = GOOGLE_REDIRECT_URI,
     client_id: str = GOOGLE_CLIENT_ID,
     client_secret: str = GOOGLE_CLIENT_SECRET,
 ) -> str:
-    """Exchange an OAuth 2.0 authorization code for a Google ID Token.
+    """Exchange an OAuth 2.0 authorization code for a Google JWT ID Token.
 
     Supports mock codes for offline unit and E2E testing environments.
     """
-    if not code:
+    if not quick_access_code:
         raise ValueError("Authorization code must not be empty")
 
     # Handle mock authorization code for offline test environments
-    if code.startswith("mock_code_") or client_id.startswith("mock-"):
+    if quick_access_code.startswith("mock_code_") or client_id.startswith("mock-"):
         return build_mock_google_id_token(
-            email=f"user_{code[-6:]}@gmail.com" if len(code) >= 6 else "mock_google@gmail.com",
-            sub=f"google_sub_{code}",
+            email=f"user_{quick_access_code[-6:]}@gmail.com" if len(quick_access_code) >= 6 else "mock_google@gmail.com",
+            sub=f"google_sub_{quick_access_code}",
             name="Mock Google User",
         )
 
     payload = {
-        "code": code,
+        "code": quick_access_code,
         "client_id": client_id,
         "client_secret": client_secret,
         "redirect_uri": redirect_uri,
@@ -86,10 +86,10 @@ async def exchange_code_for_id_token(
             raise ValueError(f"Failed to exchange code with Google Token Endpoint: {response.text}")
 
         data = response.json()
-        id_token = data.get("id_token")
-        if not id_token:
+        jwt_id_token = data.get("id_token")
+        if not jwt_id_token:
             raise ValueError("Google token endpoint response did not include 'id_token'")
-        return id_token
+        return jwt_id_token
 
 
 # endregion

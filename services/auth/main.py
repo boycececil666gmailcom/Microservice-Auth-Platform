@@ -166,15 +166,15 @@ async def google_callback(
     auto-provisions Google user, and issues signed RS256 JWT access token and refresh cookie.
     """
     try:
-        id_token = await oidc.exchange_code_for_id_token(
-            code=body.code,
+        jwt_id_token = await oidc.exchange_code_for_jwt_id_token(
+            quick_access_code=body.code,
             redirect_uri=body.redirect_uri or oidc.GOOGLE_REDIRECT_URI,
         )
     except ValueError as err:
         raise HTTPException(status_code=400, detail=f"Google Code Exchange failed: {err}")
 
     try:
-        user_info = oidc.parse_google_id_token(id_token)
+        user_info = oidc.parse_google_id_token(jwt_id_token)
     except ValueError as err:
         raise HTTPException(status_code=400, detail=f"Invalid Google ID Token: {err}")
 
