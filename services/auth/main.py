@@ -168,7 +168,7 @@ async def google_callback(
     try:
         jwt_id_token = await oidc.exchange_code_for_jwt_id_token(
             quick_access_code=body.code,
-            redirect_uri=body.redirect_uri or oidc.GOOGLE_REDIRECT_URI,
+            redirect_uri=body.redirect_uri or oidc.GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL,
         )
     except ValueError as err:
         raise HTTPException(status_code=400, detail=f"Google Code Exchange failed: {err}")

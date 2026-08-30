@@ -15,7 +15,7 @@ from .config import (
     GOOGLE_AUTH_ENDPOINT,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI,
+    GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL,
     GOOGLE_TOKEN_ENDPOINT,
 )
 
@@ -28,7 +28,7 @@ def generate_state_token() -> str:
 
 def build_google_auth_url(
     client_id: str = GOOGLE_CLIENT_ID,
-    redirect_uri: str = GOOGLE_REDIRECT_URI,
+    redirect_uri: str = GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL,
     state: str | None = None,
 ) -> str:
     """Generate the Google OAuth 2.0 / OIDC authorization redirect URL."""
@@ -53,7 +53,7 @@ def build_google_auth_url(
 # region OAuth 2.0 Authorization Code Exchange
 async def exchange_code_for_jwt_id_token(
     quick_access_code: str,
-    redirect_uri: str = GOOGLE_REDIRECT_URI,
+    redirect_uri: str = GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL,
     client_id: str = GOOGLE_CLIENT_ID,
     client_secret: str = GOOGLE_CLIENT_SECRET,
 ) -> str:

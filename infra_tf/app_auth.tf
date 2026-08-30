@@ -81,8 +81,8 @@ resource "kubernetes_deployment" "auth" {
           }
 
           env {
-            name  = "GOOGLE_REDIRECT_URI"
-            value = var.google_redirect_uri
+            name  = "GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL"
+            value = var.google_oidc_callback_to_backend_url
           }
         }
       }

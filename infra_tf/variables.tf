@@ -66,9 +66,9 @@ variable "google_client_secret" {
   default     = "mock-google-client-secret"
 }
 
-variable "google_redirect_uri" {
+variable "google_oidc_callback_to_backend_url" {
   type        = string
-  description = "Google OAuth 2.0 Authorized Redirect URI"
+  description = "Google OAuth 2.0 Authorized Redirect URI (Callback to Backend URL)"
   default     = "http://localhost/auth/google/callback"
 }
 

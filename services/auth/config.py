@@ -58,7 +58,9 @@ GOOGLE_CLIENT_ID = os.environ.get(
     "GOOGLE_CLIENT_ID", "mock-google-client-id.apps.googleusercontent.com"
 )
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "mock-google-client-secret")
-GOOGLE_REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost/auth/google/callback")
+GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL = os.environ.get(
+    "GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL", "http://localhost/auth/google/callback"
+)
 
 GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
