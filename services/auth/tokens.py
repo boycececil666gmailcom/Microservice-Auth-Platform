@@ -35,6 +35,7 @@ async def close_redis_pool() -> None:
 def create_access_token(email: str, sso_provider: str = "local") -> str:
     """Create a signed RS256 JWT access token with single universal OIDC schema."""
     payload = {
+        "iss": "auth_service",
         "sub": email,
         "email": email,
         "sso_provider": sso_provider,

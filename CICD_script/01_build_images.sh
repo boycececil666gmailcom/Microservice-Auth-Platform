@@ -15,8 +15,5 @@ docker build -t url-shortener-shortener:latest -f "$ROOT_DIR/services/shortener/
 echo "Building Auth Service..."
 docker build -t url-shortener-auth:latest -f "$ROOT_DIR/services/auth/Dockerfile" "$ROOT_DIR"
 
-echo "Building Gateway Service..."
-docker build -t url-shortener-gateway:latest -f "$ROOT_DIR/services/gateway/Dockerfile" "$ROOT_DIR"
-
 echo "[OK] All Docker images built successfully."
 echo

@@ -1,9 +1,8 @@
 import jwt
 import pytest
 
-from services.auth.config import JWT_PRIVATE_KEY
+from services.auth.config import JWT_PRIVATE_KEY, JWT_PUBLIC_KEY
 from services.auth.passwords import hash_password, verify_password
-from services.gateway.config import JWT_PUBLIC_KEY
 
 
 def test_hash_password_and_verification_success():
