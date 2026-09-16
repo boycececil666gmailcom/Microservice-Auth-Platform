@@ -1,27 +1,24 @@
-### Flow
+# Read Path API
 
 ```mermaid
----
-config:
-  layout: elk
-  theme: neutral
----
 sequenceDiagram
     participant C as Client
-    participant A as API Gateway
-    participant R as Redis
-    participant DB as Read Replica
+    participant G as API Gateway
+    participant S as Shortener Service
+    participant R as Redis Cache
+    participant DB as PostgreSQL
 
-    C ->> A: GET /api/v1/urls/:short_code
-    A ->> R: Lookup short_code
-    alt Cache HIT
-        R -->> A: {short_code, long_url, created_at}
-    else Cache MISS
-        R -->> A: null
-        A ->> DB: SELECT * WHERE short_code = ?
-        DB -->> A: {short_code, long_url, created_at}
+    C ->> G: GET /api/v1/urls/{short_url}
+    G ->> G: Verify RS256 access token
+    G ->> S: GET /urls/{short_url}
+    S ->> R: GET url:{short_url}
+    alt Cache hit
+        R -->> S: {short_url, long_url, created_at}
+    else Cache miss or corrupt entry
+        S ->> DB: SELECT by short_url
+        DB -->> S: {short_url, long_url, created_at}
+        S ->> R: SET cached record with TTL
     end
-    A -->> C: 200 OK {short_code, long_url, created_at}
+    S -->> G: 200 OK
+    G -->> C: {short_url, long_url, created_at}
 ```
-
-

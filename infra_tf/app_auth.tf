@@ -25,10 +25,19 @@ resource "kubernetes_deployment" "auth" {
       }
 
       spec {
+        automount_service_account_token = false
+
         container {
           name              = "auth"
           image             = "url-shortener-auth:latest"
           image_pull_policy = "IfNotPresent"
+
+          security_context {
+            allow_privilege_escalation = false
+            read_only_root_filesystem  = true
+            run_as_non_root            = true
+            capabilities { drop = ["ALL"] }
+          }
 
           port {
             container_port = 8002
@@ -46,8 +55,13 @@ resource "kubernetes_deployment" "auth" {
           }
 
           env {
-            name  = "DATABASE_URL"
-            value = var.auth_db_url
+            name = "DATABASE_URL"
+            value_from {
+              secret_key_ref {
+                name = kubernetes_secret.auth_database.metadata[0].name
+                key  = "database_url"
+              }
+            }
           }
 
           env {
@@ -71,6 +85,11 @@ resource "kubernetes_deployment" "auth" {
           }
 
           env {
+            name  = "ALLOW_MOCK_OIDC"
+            value = tostring(var.allow_mock_oidc)
+          }
+
+          env {
             name = "GOOGLE_CLIENT_SECRET"
             value_from {
               secret_key_ref {
@@ -83,6 +102,29 @@ resource "kubernetes_deployment" "auth" {
           env {
             name  = "GOOGLE_OIDC_CALLBACK_TO_BACKEND_URL"
             value = var.google_oidc_callback_to_backend_url
+          }
+
+          env {
+            name  = "COOKIE_SECURE"
+            value = tostring(var.cookie_secure)
+          }
+
+          liveness_probe {
+            http_get {
+              path = "/health"
+              port = 8002
+            }
+            initial_delay_seconds = 5
+            period_seconds        = 10
+          }
+
+          readiness_probe {
+            http_get {
+              path = "/ready"
+              port = 8002
+            }
+            initial_delay_seconds = 3
+            period_seconds        = 5
           }
         }
       }

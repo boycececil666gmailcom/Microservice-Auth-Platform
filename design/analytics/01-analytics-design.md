@@ -33,7 +33,7 @@ sequenceDiagram
 
 ## 2. Analytics Retrieval Flow
 
-The client retrieves analytics data via the API Gateway. The gateway validates the RS256 JWT signature in-memory using its public key and proxies the stats request to the analytics container with the `X-User-ID` header.
+The client retrieves analytics data via the API Gateway. The gateway validates the RS256 JWT signature using the Auth service's cached JWKS and proxies the stats request to the analytics container.
 
 ```mermaid
 sequenceDiagram
@@ -45,10 +45,9 @@ sequenceDiagram
     C->>G: GET /api/v1/analytics/stats
     Note right of C: Header: Authorization: Bearer <Consolidated_JWT>
     
-    G->>G: Verify RS256 JWT Signature (in-memory using RSA Public Key)
+    G->>G: Verify RS256 JWT signature using cached JWKS
     
     G->>A: Forward stats query to http://analytics:8003/stats
-    Note right of G: Header: X-User-ID: <sub_from_jwt>
     A-->>G: Returns analytics counts JSON
     G-->>C: 200 OK with analytics data
 ```
@@ -58,11 +57,11 @@ sequenceDiagram
 ## 3. Data Schema
 
 ### Kafka Event Structure
-The message published on the `url-redirects` topic is a serialized JSON payload containing the string short URL slug:
+The message published on the `url-redirects` topic is a serialized JSON payload containing the numeric short URL ID:
 
 ```json
 {
-  "short_url": "aB3x9k",
+  "short_url": 42,
   "event": "redirect"
 }
 ```
@@ -74,7 +73,7 @@ The HTTP endpoint `/stats` returns a summary of the captured statistics:
 {
   "total_redirects": 1,
   "redirects_by_short_url": {
-    "aB3x9k": 1
+    "42": 1
   }
 }
 ```

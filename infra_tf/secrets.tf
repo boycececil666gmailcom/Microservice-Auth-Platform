@@ -21,48 +21,35 @@ resource "kubernetes_secret" "jwt_private_key" {
   type = "Opaque"
 
   data = {
-    "private_key.pem" = var.rsa_private_key_pem != null ? var.rsa_private_key_pem : file("${path.module}/${var.rsa_private_key_path}")
+    "private_key.pem" = var.rsa_private_key_pem
   }
 }
 
-resource "kubernetes_secret" "jwt_public_key" {
+resource "kubernetes_secret" "auth_database" {
   metadata {
-    name      = "jwt-public-key"
+    name      = "auth-database"
     namespace = kubernetes_namespace.url_shortener.metadata[0].name
   }
 
   type = "Opaque"
 
   data = {
-    "public_key.pem" = var.rsa_public_key_pem != null ? var.rsa_public_key_pem : file("${path.module}/${var.rsa_public_key_path}")
+    password     = var.auth_db_password
+    database_url = "postgresql://postgres:${urlencode(var.auth_db_password)}@auth-db:5432/auth"
   }
 }
 
-resource "kubernetes_secret" "auth_db_credentials" {
+resource "kubernetes_secret" "shortener_database" {
   metadata {
-    name      = "postgres.auth-db.credentials.postgresql.acid.zalan.do"
+    name      = "shortener-database"
     namespace = kubernetes_namespace.url_shortener.metadata[0].name
   }
 
   type = "Opaque"
 
   data = {
-    username = "postgres"
-    password = "postgres"
-  }
-}
-
-resource "kubernetes_secret" "shortener_db_credentials" {
-  metadata {
-    name      = "postgres.shortener-db.credentials.postgresql.acid.zalan.do"
-    namespace = kubernetes_namespace.url_shortener.metadata[0].name
-  }
-
-  type = "Opaque"
-
-  data = {
-    username = "postgres"
-    password = "postgres"
+    password     = var.shortener_db_password
+    database_url = "postgresql://postgres:${urlencode(var.shortener_db_password)}@shortener-db:5432/urlshortener"
   }
 }
 #endregion

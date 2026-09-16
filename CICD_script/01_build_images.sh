@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 # Resolve the absolute path of the root directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,5 +15,8 @@ docker build -t url-shortener-shortener:latest -f "$ROOT_DIR/services/shortener/
 echo "Building Auth Service..."
 docker build -t url-shortener-auth:latest -f "$ROOT_DIR/services/auth/Dockerfile" "$ROOT_DIR"
 
-echo "[OK] All Docker images built successfully."
+echo "Building Analytics Service..."
+docker build -t url-shortener-analytics:latest -f "$ROOT_DIR/services/analytics/Dockerfile" "$ROOT_DIR"
+
+echo "[OK] All Go service images built successfully."
 echo

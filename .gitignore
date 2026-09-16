@@ -1,12 +1,15 @@
 # Dependencies
 node_modules/
 
-# Python
+# Go
+bin/
+coverage.out
+*.test
+
+# Local legacy Python artifacts
+.venv/
 __pycache__/
 *.py[cod]
-*.pyo
-.venv/
-.uv-cache/
 
 # Environment variables
 .env

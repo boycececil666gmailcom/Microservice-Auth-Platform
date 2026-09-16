@@ -1,13 +1,12 @@
-# ── Python ────────────────────────────────────────────────────────────────────
+# ── Go build output ───────────────────────────────────────────────────────────
+bin/
+*.test
+coverage.out
+
+# ── Local legacy Python artifacts ─────────────────────────────────────────────
+.venv/
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
-.Python
-
-# ── Virtual environment ───────────────────────────────────────────────────────
-# Dependencies are installed fresh inside the container via uv sync
-.venv/
 
 # ── Version control ───────────────────────────────────────────────────────────
 .git/

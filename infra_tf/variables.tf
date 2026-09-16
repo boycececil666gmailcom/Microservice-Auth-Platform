@@ -16,22 +16,10 @@ variable "namespace" {
   default     = "url-shortener"
 }
 
-variable "rsa_private_key_path" {
+variable "auth_db_password" {
   type        = string
-  description = "Path to the RSA private key file for token signing."
-  default     = "../keys/private_key.pem"
-}
-
-variable "rsa_public_key_path" {
-  type        = string
-  description = "Path to the RSA public key file for token verification."
-  default     = "../keys/public_key.pem"
-}
-
-variable "auth_db_url" {
-  type        = string
-  description = "PostgreSQL connection string for Auth service"
-  default     = "postgresql://postgres:postgres@auth-db:5432/auth"
+  description = "PostgreSQL password for the Auth service database."
+  sensitive   = true
 }
 
 variable "auth_redis_url" {
@@ -40,10 +28,10 @@ variable "auth_redis_url" {
   default     = "redis://auth-redis:6379"
 }
 
-variable "shortener_db_url" {
+variable "shortener_db_password" {
   type        = string
-  description = "PostgreSQL connection string for Shortener service"
-  default     = "postgresql://postgres:postgres@shortener-db:5432/urlshortener"
+  description = "PostgreSQL password for the Shortener service database."
+  sensitive   = true
 }
 
 variable "shortener_redis_url" {
@@ -52,18 +40,28 @@ variable "shortener_redis_url" {
   default     = "redis://shortener-redis:6379"
 }
 
+variable "kafka_broker_url" {
+  type        = string
+  description = "Kafka broker address used by the shortener and analytics services"
+  default     = "kafka:9092"
+}
+
 # ── Google OIDC Variables ──────────────────────────────────────────────────────
 variable "google_client_id" {
   type        = string
   description = "Google OAuth 2.0 Client ID for OIDC authentication"
-  default     = "mock-google-client-id.apps.googleusercontent.com"
 }
 
 variable "google_client_secret" {
   type        = string
   description = "Google OAuth 2.0 Client Secret for OIDC authentication"
   sensitive   = true
-  default     = "mock-google-client-secret"
+}
+
+variable "allow_mock_oidc" {
+  type        = bool
+  description = "Enable mock Google codes for isolated E2E testing only. Never enable in production."
+  default     = false
 }
 
 variable "google_oidc_callback_to_backend_url" {
@@ -72,18 +70,17 @@ variable "google_oidc_callback_to_backend_url" {
   default     = "http://localhost/auth/google/callback"
 }
 
+variable "cookie_secure" {
+  type        = bool
+  description = "Mark refresh cookies Secure; enable for HTTPS deployments."
+  default     = false
+}
+
 # ── RSA Key Pem Variables ──────────────────────────────────────────────────────
 variable "rsa_private_key_pem" {
   type        = string
   description = "RSA private key PEM string for token signing."
   sensitive   = true
-  default     = null
-}
-
-variable "rsa_public_key_pem" {
-  type        = string
-  description = "RSA public key PEM string for token verification."
-  default     = null
 }
 
 

@@ -1,26 +1,17 @@
-# ── Base image ────────────────────────────────────────────────────────────────
-FROM python:3.11-slim
+FROM golang:1.26-alpine AS build
 
-# Keeps Python from buffering stdout/stderr (important for container logs)
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/shortener ./cmd/shortener
 
-# ── Install uv ────────────────────────────────────────────────────────────────
-RUN pip install --no-cache-dir uv
-
-# ── Working directory ─────────────────────────────────────────────────────────
-WORKDIR /app
-
-# ── Install dependencies (layer-cache friendly) ───────────────────────────────
-# Copy only the dependency manifests first so Docker can cache this layer
-# and skip re-installing when only application code changes.
-COPY services/shortener/pyproject.toml services/shortener/uv.lock ./
-RUN uv sync --frozen --no-dev
-
-# ── Copy application source ───────────────────────────────────────────────────
-COPY services/shortener/ ./shortener/
-
-# ── Run the server ────────────────────────────────────────────────────────────
-# Internal service — not exposed to the host, only reachable inside Docker network.
-CMD ["uv", "run", "uvicorn", "shortener.main:app", \
-     "--host", "0.0.0.0", "--port", "8001", "--reload"]
+FROM alpine:3.22
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates \
+    && adduser -D -H -u 10001 app
+COPY --from=build /out/shortener /usr/local/bin/shortener
+USER app
+EXPOSE 8001
+ENTRYPOINT ["/usr/local/bin/shortener"]

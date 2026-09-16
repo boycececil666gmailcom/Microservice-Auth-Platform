@@ -1,24 +1,17 @@
-# ── Base image ────────────────────────────────────────────────────────────────
-FROM python:3.11-slim
+FROM golang:1.26-alpine AS build
 
-ENV PYTHONUNBUFFERED=1 \
-    PYTHONDONTWRITEBYTECODE=1
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/auth ./cmd/auth
 
-# ── Install uv ────────────────────────────────────────────────────────────────
-RUN pip install --no-cache-dir uv
-
-# ── Working directory ─────────────────────────────────────────────────────────
-WORKDIR /app
-
-# ── Install dependencies (layer-cache friendly) ───────────────────────────────
-# Uses the auth-specific pyproject.toml so only auth dependencies are installed.
-COPY services/auth/pyproject.toml services/auth/uv.lock ./
-RUN uv sync --no-dev
-
-# ── Copy application source ───────────────────────────────────────────────────
-COPY services/auth/ ./auth/
-
-# ── Run the server ────────────────────────────────────────────────────────────
-# Internal service — not exposed to the host, only reachable inside Docker network.
-CMD ["uv", "run", "uvicorn", "auth.main:app", \
-    "--host", "0.0.0.0", "--port", "8002", "--reload"]
+FROM alpine:3.22
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates \
+    && adduser -D -H -u 10001 app
+COPY --from=build /out/auth /usr/local/bin/auth
+USER app
+EXPOSE 8002
+ENTRYPOINT ["/usr/local/bin/auth"]

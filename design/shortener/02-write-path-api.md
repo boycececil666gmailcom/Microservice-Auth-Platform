@@ -16,9 +16,7 @@ sequenceDiagram
 
     C ->> A: POST /api/v1/shorten {long_url}
     alt Invalid or missing long_url
-        A -->> C: 400 Bad Request
-    else Rate limit exceeded
-        A -->> C: 429 Too Many Requests
+        A -->> C: 422 Unprocessable Entity
     else Valid request
         A ->> S: Validate & shorten
         S ->> DB: INSERT INTO urls (long_url) ... ON CONFLICT DO NOTHING

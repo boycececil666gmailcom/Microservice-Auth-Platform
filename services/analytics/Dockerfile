@@ -1,20 +1,17 @@
-FROM python:3.12-slim
+FROM golang:1.26-alpine AS build
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/analytics ./cmd/analytics
 
-ENV UV_SYSTEM_PYTHON=1 \
-    PYTHONUNBUFFERED=1
-
-WORKDIR /app
-
-# Install dependencies
-COPY services/analytics/pyproject.toml services/analytics/uv.lock ./
-RUN uv sync --frozen
-
-# Copy application source code
-COPY services/analytics/ ./analytics/
-
-
-# Start the application
-CMD ["uv", "run", "uvicorn", "analytics.main:app", "--host", "0.0.0.0", "--port", "8003", "--reload"]
+FROM alpine:3.22
+RUN apk upgrade --no-cache \
+    && apk add --no-cache ca-certificates \
+    && adduser -D -H -u 10001 app
+COPY --from=build /out/analytics /usr/local/bin/analytics
+USER app
+EXPOSE 8003
+ENTRYPOINT ["/usr/local/bin/analytics"]

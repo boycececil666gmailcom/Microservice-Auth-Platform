@@ -30,9 +30,9 @@ sequenceDiagram
     end
     
     A->>A: Generate Universal RS256 JWT (sub: email, email: email, sso_provider='local', exp: 15m)
-    A->>A: Generate Refresh Token (Opaque 48-char string)
+    A->>A: Generate Refresh Token (48 random bytes, URL-safe encoded)
     
-    A->>R: SET refresh_token:{token} = email EX 30d
+    A->>R: SET refresh_token:{SHA-256(token)} = {email, provider} EX 30d
     
     A-->>G: 200 OK
     Note over A,G: Access Token (JSON body)<br/>Refresh Token (Set-Cookie: HttpOnly)
@@ -85,6 +85,7 @@ sequenceDiagram
     end
 
     Note over A,R: Phase 4: Resolve Identity and Issue Platform Tokens
+    A->>A: Verify Google signature, issuer, audience, expiry, azp, and email_verified
     A->>A: Parse Google claims (email, sub, name, picture)
     A->>PG: Fetch user by google_sub OR email
 
@@ -100,7 +101,7 @@ sequenceDiagram
 
     A->>A: Sign platform access JWT with RS256 private key (15m)
     A->>A: Generate opaque refresh token
-    A->>R: SET refresh_token:{opaque token} = email (TTL 30d)
+    A->>R: SET refresh_token:{SHA-256(token)} = {email, provider} (TTL 30d)
 
     A-->>G: Access JWT (JSON) + refresh token (HttpOnly cookie)
     G-->>C: 200 OK
@@ -125,7 +126,8 @@ sequenceDiagram
     C->>G: POST /api/v1/shorten
     Note right of C: Header: Authorization: Bearer <Universal_JWT>
     
-    G->>G: Verify RS256 JWT Signature (in-memory using RSA Public Key)
+    G->>A: Fetch JWKS when cache is cold or expired
+    G->>G: Verify RS256 JWT signature using cached public key
     
     alt Token is Valid
         G->>S: Forward to Shortener
@@ -141,7 +143,7 @@ sequenceDiagram
         Note right of C: Cookie: refresh_token=[opaque string]
         
         G->>A: Forward request
-        A->>R: GET refresh_token:{token}
+        A->>R: GET refresh_token:{SHA-256(token)}
         
         alt Refresh Token Invalid / Expired
             R-->>A: Null
@@ -149,10 +151,11 @@ sequenceDiagram
             G-->>C: 401 Unauthorized (Must login again)
             
         else Refresh Token Valid
-            R-->>A: Return email
+            R-->>A: Return email and originating sign-in provider
             A->>PG: Check if email exists in DB
             PG-->>A: User exists & Active
-            A->>A: Generate NEW Universal RS256 JWT (sub: email, email: email, sso_provider, 15m)
+            A->>A: Generate NEW Universal RS256 JWT and opaque refresh token
+            A->>R: Atomically revoke old digest and store new digest
             A-->>G: 200 OK {access_token: "..."}
             G-->>C: 200 OK
             
@@ -184,7 +187,7 @@ sequenceDiagram
     Note right of C: Cookie: refresh_token=[opaque string]
     
     G->>A: Forward request
-    A->>R: DEL refresh_token:{token}
+    A->>R: DEL refresh_token:{SHA-256(token)}
     
     A-->>G: 200 OK (Clear Cookie)
     G-->>C: 200 OK (User logged out)

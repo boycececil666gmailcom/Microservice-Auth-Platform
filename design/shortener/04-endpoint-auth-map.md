@@ -39,6 +39,7 @@ shorten   urls/{id} analytics                    login     refresh   logout    {
 | Method | Endpoint Path | Auth Type | Target Upstream Service | Description |
 | :--- | :--- | :--- | :--- | :--- |
 | **GET** | `/health` | None | Gateway Internal | Performs Gateway health verification. |
+| **GET** | `/.well-known/jwks.json` | None | `http://auth:8002/.well-known/jwks.json` | Publishes the current RSA verification key for gateway JWT validation. |
 | **POST** | `/auth/login` | None | `http://auth:8002/auth/login` | Registers or authenticates a user; returns a JWT access token in the response body and stores a refresh token in an `HttpOnly` cookie. |
 | **POST** | `/auth/refresh` | Refresh Cookie | `http://auth:8002/auth/refresh` | Consumes the `refresh_token` cookie to issue a new short-lived JWT access token. |
 | **POST** | `/auth/logout` | Refresh Cookie | `http://auth:8002/auth/logout` | Revokes the active refresh token and clears the client's cookie. |

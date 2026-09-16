@@ -1,12 +1,12 @@
-#region Shortener Service
-resource "kubernetes_deployment" "shortener" {
+#region Analytics Service
+resource "kubernetes_deployment" "analytics" {
   depends_on = [kubernetes_job_v1.kafka_topics]
 
   metadata {
-    name      = "shortener"
+    name      = "analytics"
     namespace = kubernetes_namespace.url_shortener.metadata[0].name
     labels = {
-      app = "shortener"
+      app = "analytics"
     }
   }
 
@@ -15,14 +15,14 @@ resource "kubernetes_deployment" "shortener" {
 
     selector {
       match_labels = {
-        app = "shortener"
+        app = "analytics"
       }
     }
 
     template {
       metadata {
         labels = {
-          app = "shortener"
+          app = "analytics"
         }
       }
 
@@ -30,8 +30,8 @@ resource "kubernetes_deployment" "shortener" {
         automount_service_account_token = false
 
         container {
-          name              = "shortener"
-          image             = "url-shortener-shortener:latest"
+          name              = "analytics"
+          image             = "url-shortener-analytics:latest"
           image_pull_policy = "IfNotPresent"
 
           security_context {
@@ -42,33 +42,18 @@ resource "kubernetes_deployment" "shortener" {
           }
 
           port {
-            container_port = 8001
+            container_port = 8003
           }
 
           resources {
             requests = {
-              cpu    = "100m"
-              memory = "128Mi"
+              cpu    = "50m"
+              memory = "64Mi"
             }
             limits = {
-              cpu    = "500m"
-              memory = "256Mi"
+              cpu    = "250m"
+              memory = "128Mi"
             }
-          }
-
-          env {
-            name = "DATABASE_URL"
-            value_from {
-              secret_key_ref {
-                name = kubernetes_secret.shortener_database.metadata[0].name
-                key  = "database_url"
-              }
-            }
-          }
-
-          env {
-            name  = "REDIS_URL"
-            value = var.shortener_redis_url
           }
 
           env {
@@ -79,7 +64,7 @@ resource "kubernetes_deployment" "shortener" {
           liveness_probe {
             http_get {
               path = "/health"
-              port = 8001
+              port = 8003
             }
             initial_delay_seconds = 5
             period_seconds        = 10
@@ -88,7 +73,7 @@ resource "kubernetes_deployment" "shortener" {
           readiness_probe {
             http_get {
               path = "/ready"
-              port = 8001
+              port = 8003
             }
             initial_delay_seconds = 3
             period_seconds        = 5
@@ -99,20 +84,20 @@ resource "kubernetes_deployment" "shortener" {
   }
 }
 
-resource "kubernetes_service" "shortener" {
+resource "kubernetes_service" "analytics" {
   metadata {
-    name      = "shortener"
+    name      = "analytics"
     namespace = kubernetes_namespace.url_shortener.metadata[0].name
   }
 
   spec {
     selector = {
-      app = "shortener"
+      app = "analytics"
     }
 
     port {
-      port        = 8001
-      target_port = 8001
+      port        = 8003
+      target_port = 8003
       protocol    = "TCP"
     }
   }
