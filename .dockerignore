@@ -3,17 +3,11 @@ bin/
 *.test
 coverage.out
 
-# ── Local legacy Python artifacts ─────────────────────────────────────────────
-.venv/
-__pycache__/
-*.py[cod]
-
 # ── Version control ───────────────────────────────────────────────────────────
 .git/
 .gitignore
 
-# ── Project tooling / docs (not needed at runtime) ───────────────────────────
-.qoder/
+# ── Project docs (not needed at runtime) ──────────────────────────────────────
 design/
 
 # ── Environment files (secrets must never bake into the image) ───────────────
