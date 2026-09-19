@@ -31,14 +31,6 @@ static_resources:
                             body:
                               inline_string: '{"status":"ok"}'
                         - match:
-                            path: /.well-known/jwks.json
-                          route:
-                            cluster: auth_service
-                        - match:
-                            prefix: /auth
-                          route:
-                            cluster: auth_service
-                        - match:
                             prefix: /api/v1/analytics/stats
                           route:
                             cluster: analytics_service
@@ -80,53 +72,10 @@ static_resources:
                         default_value:
                           numerator: 100
                           denominator: HUNDRED
-                  - name: envoy.filters.http.jwt_authn
-                    typed_config:
-                      "@type": type.googleapis.com/envoy.extensions.filters.http.jwt_authn.v3.JwtAuthentication
-                      providers:
-                        auth_provider:
-                          issuer: auth_service
-                          remote_jwks:
-                            http_uri:
-                              uri: http://auth:8002/.well-known/jwks.json
-                              cluster: auth_service
-                              timeout: 2s
-                            cache_duration: 300s
-                            async_fetch: {}
-                          from_headers:
-                            - name: Authorization
-                              value_prefix: "Bearer "
-                      rules:
-                        - match:
-                            prefix: /api/v1/shorten
-                          requires:
-                            provider_name: auth_provider
-                        - match:
-                            prefix: /api/v1/urls/
-                          requires:
-                            provider_name: auth_provider
-                        - match:
-                            prefix: /api/v1/analytics/stats
-                          requires:
-                            provider_name: auth_provider
                   - name: envoy.filters.http.router
                     typed_config:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.router.v3.Router
   clusters:
-    - name: auth_service
-      type: STRICT_DNS
-      dns_lookup_family: V4_ONLY
-      connect_timeout: 1s
-      lb_policy: ROUND_ROBIN
-      load_assignment:
-        cluster_name: auth_service
-        endpoints:
-          - lb_endpoints:
-              - endpoint:
-                  address:
-                    socket_address:
-                      address: auth
-                      port_value: 8002
     - name: shortener_service
       type: STRICT_DNS
       dns_lookup_family: V4_ONLY

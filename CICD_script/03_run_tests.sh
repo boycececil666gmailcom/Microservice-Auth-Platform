@@ -20,18 +20,9 @@ SHORTENER_DB_POD=$(get_pod_name "app=shortener-db")
 kubectl exec -n "$NAMESPACE" "$SHORTENER_DB_POD" -- psql -U postgres -c "CREATE DATABASE urlshortener;" 2>/dev/null || true
 kubectl exec -n "$NAMESPACE" "$SHORTENER_DB_POD" -- psql -U postgres -d urlshortener -c "TRUNCATE TABLE urls RESTART IDENTITY CASCADE;"
 
-echo "Flushing Auth PostgreSQL..."
-AUTH_DB_POD=$(get_pod_name "app=auth-db")
-kubectl exec -n "$NAMESPACE" "$AUTH_DB_POD" -- psql -U postgres -c "CREATE DATABASE auth;" 2>/dev/null || true
-kubectl exec -n "$NAMESPACE" "$AUTH_DB_POD" -- psql -U postgres -d auth -c "TRUNCATE TABLE users RESTART IDENTITY CASCADE;"
-
 echo "Flushing Shortener Redis..."
 SHORTENER_REDIS_POD=$(get_pod_name "app=shortener-redis")
 kubectl exec -n "$NAMESPACE" "$SHORTENER_REDIS_POD" -- redis-cli FLUSHALL
-
-echo "Flushing Auth Redis..."
-AUTH_REDIS_POD=$(get_pod_name "app=auth-redis")
-kubectl exec -n "$NAMESPACE" "$AUTH_REDIS_POD" -- redis-cli FLUSHALL
 
 echo "[OK] Databases and caches flushed."
 echo

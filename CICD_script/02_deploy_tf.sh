@@ -17,12 +17,9 @@ NAMESPACE=$(terraform output -raw namespace)
 
 echo "Waiting for deployments to be ready..."
 kubectl rollout status \
-  deployment/auth-db \
   deployment/shortener-db \
-  deployment/auth-redis \
   deployment/shortener-redis \
   deployment/kafka \
-  deployment/auth \
   deployment/shortener \
   deployment/analytics \
   deployment/gateway \
