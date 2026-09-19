@@ -1,28 +1,40 @@
-output "namespace" {
-  value       = kubernetes_namespace.url_shortener.metadata[0].name
-  description = "Target Kubernetes namespace."
+#region Gateway Outputs
+output "api_endpoint" {
+  value       = aws_apigatewayv2_stage.default.invoke_url
+  description = "Base HTTPS invoke URL for the HTTP API Gateway."
 }
-output "namespace" {
-  value       = kubernetes_namespace.url_shortener.metadata[0].name
-  description = "Target Kubernetes namespace."
+#endregion
+
+#region Lambda Outputs
+output "shortener_lambda_arn" {
+  value       = aws_lambda_function.shortener.arn
+  description = "ARN of the URL Shortener Lambda function."
 }
 
-output "gateway_service_name" {
-  value       = kubernetes_service.gateway.metadata[0].name
-  description = "Kubernetes service name for API Gateway."
+output "shortener_lambda_name" {
+  value       = aws_lambda_function.shortener.function_name
+  description = "Name of the URL Shortener Lambda function."
 }
 
-output "shortener_service_name" {
-  value       = kubernetes_service.shortener.metadata[0].name
-  description = "Kubernetes service name for Shortener Service."
+output "analytics_lambda_arn" {
+  value       = aws_lambda_function.analytics.arn
+  description = "ARN of the Analytics Lambda function."
 }
 
-output "analytics_service_name" {
-  value       = kubernetes_service.analytics.metadata[0].name
-  description = "Kubernetes service name for Analytics Service."
+output "analytics_lambda_name" {
+  value       = aws_lambda_function.analytics.function_name
+  description = "Name of the Analytics Lambda function."
+}
+#endregion
+
+#region SQS Outputs
+output "sqs_queue_url" {
+  value       = aws_sqs_queue.url_redirects.url
+  description = "URL of the URL redirect events SQS queue."
 }
 
-output "kafka_service_name" {
-  value       = kubernetes_service.kafka.metadata[0].name
-  description = "Kubernetes service name for the local/test Kafka broker."
+output "sqs_queue_arn" {
+  value       = aws_sqs_queue.url_redirects.arn
+  description = "ARN of the URL redirect events SQS queue."
 }
+#endregion

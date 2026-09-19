@@ -1,17 +1,30 @@
-#region Terraform and Provider
+#region Terraform Config
 terraform {
   required_version = ">= 1.5.0"
 
   required_providers {
-    kubernetes = {
-      source  = "hashicorp/kubernetes"
-      version = "~> 2.30"
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
     }
   }
 }
+#endregion
 
-provider "kubernetes" {
-  config_path    = var.kubeconfig_path
-  config_context = var.kubeconfig_context
+#region AWS Provider
+provider "aws" {
+  region = var.aws_region
+
+  default_tags {
+    tags = {
+      Project     = var.app_name
+      Environment = var.environment
+      ManagedBy   = "Terraform"
+    }
+  }
 }
 #endregion

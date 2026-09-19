@@ -6,23 +6,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/../infra_tf"
 
 echo "========================================================"
-echo "2. Deploying Infrastructure via Terraform"
+echo "2. Deploying AWS Lambda Infrastructure via Terraform"
 echo "========================================================"
 
 cd "$TF_DIR"
 terraform init
 terraform apply -auto-approve
 
-NAMESPACE=$(terraform output -raw namespace)
+echo
+echo "Deployment Outputs:"
+terraform output
 
-echo "Waiting for deployments to be ready..."
-kubectl rollout status \
-  deployment/shortener-db \
-  deployment/shortener-redis \
-  deployment/kafka \
-  deployment/shortener \
-  deployment/analytics \
-  deployment/gateway \
-  -n "$NAMESPACE" --timeout=180s
-
-echo "[OK] Terraform infrastructure deployment complete."
+echo
+echo "[OK] AWS Lambda infrastructure deployment complete."

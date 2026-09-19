@@ -1,23 +1,11 @@
-# ── Google OpenID Connect (OIDC) Credentials ──────────────────────────────────
-google_client_id     = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-google_client_secret = "YOUR_GOOGLE_CLIENT_SECRET"
-google_oidc_callback_to_backend_url = "http://localhost/auth/google/callback"
-allow_mock_oidc = false # true only with a mock-* client ID in isolated E2E environments
+# AWS Configuration
+aws_region  = "us-east-1"
+environment = "dev"
+app_name    = "url-shortener"
 
-# ── Database Credentials ──────────────────────────────────────────────────────
-auth_db_password      = "REPLACE_WITH_A_STRONG_AUTH_DATABASE_PASSWORD"
-shortener_db_password = "REPLACE_WITH_A_STRONG_SHORTENER_DATABASE_PASSWORD"
+# Data Stores
+database_url = "postgresql://postgres:postgres@localhost:5432/urlshortener?sslmode=disable"
+redis_url    = "redis://localhost:6379"
 
-# ── RSA Key Pair (PEM Format Multiline Strings) ──────────────────────────────
-rsa_private_key_pem = <<EOF
------BEGIN PRIVATE KEY-----
-YOUR_RSA_PRIVATE_KEY_PEM_CONTENT_HERE
------END PRIVATE KEY-----
-EOF
-
-
-# The Auth service publishes a JWKS derived from this private key. Envoy fetches
-# and caches that JWKS, so a separate public-key setting is not required.
-
-# Set true when the gateway is served over HTTPS.
-cookie_secure = false
+# Logging
+log_retention_days = 14

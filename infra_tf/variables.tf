@@ -1,47 +1,40 @@
-variable "kubeconfig_path" {
+#region Core Variables
+variable "aws_region" {
   type        = string
-  description = "Path to the local kubeconfig file."
-  default     = "~/.kube/config"
+  description = "AWS region for provisioning resources."
+  default     = "us-east-1"
 }
 
-variable "kubeconfig_context" {
+variable "environment" {
   type        = string
-  description = "Kubernetes context to use."
-  default     = null
+  description = "Deployment environment name (e.g. dev, prod)."
+  default     = "dev"
 }
 
-variable "kubeconfig_path" {
+variable "app_name" {
   type        = string
-  description = "Path to the local kubeconfig file."
-  default     = "~/.kube/config"
-}
-
-variable "kubeconfig_context" {
-  type        = string
-  description = "Kubernetes context to use."
-  default     = null
-}
-
-variable "namespace" {
-  type        = string
-  description = "Target Kubernetes namespace for URL Shortener services."
+  description = "Application name prefix used across resources."
   default     = "url-shortener"
 }
+#endregion
 
-variable "shortener_db_password" {
+#region Service Variables
+variable "database_url" {
   type        = string
-  description = "PostgreSQL password for the Shortener service database."
+  description = "PostgreSQL connection string for the URL shortener service."
   sensitive   = true
+  default     = "postgresql://postgres:postgres@localhost:5432/urlshortener?sslmode=disable"
 }
 
-variable "shortener_redis_url" {
+variable "redis_url" {
   type        = string
-  description = "Redis connection string for Shortener service"
-  default     = "redis://shortener-redis:6379"
+  description = "Redis connection string for URL shortener cache."
+  default     = "redis://localhost:6379"
 }
 
-variable "kafka_broker_url" {
-  type        = string
-  description = "Kafka broker address used by the shortener and analytics services"
-  default     = "kafka:9092"
+variable "log_retention_days" {
+  type        = number
+  description = "Retention period in days for Lambda CloudWatch logs."
+  default     = 14
 }
+#endregion
