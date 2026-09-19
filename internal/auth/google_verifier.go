@@ -37,10 +37,19 @@ type GoogleVerifier struct {
 	expires time.Time
 }
 
+// NewGoogleVerifier creates a verifier for the expected audience and Google JWKS endpoint.
 func NewGoogleVerifier(client *http.Client, audience, jwksURL string) *GoogleVerifier {
 	return &GoogleVerifier{client: client, audience: audience, jwksURL: jwksURL}
 }
 
+// Verify validates a Google ID token and returns its normalized identity data.
+//
+// Only RS256 is accepted. The signing key is selected by the token's kid header
+// and loaded through Google's JWKS endpoint when it is not cached. Verification
+// requires the configured audience, expiry, issued-at time, a recognized Google
+// issuer, non-empty subject and email claims, a verified email, and a matching
+// authorized-party claim when azp is present. Any signature, key-fetch, or claim
+// failure is returned as an error.
 func (v *GoogleVerifier) Verify(ctx context.Context, rawToken string) (GoogleUser, error) {
 	claims := &googleClaims{}
 	token, err := jwt.ParseWithClaims(rawToken, claims, func(token *jwt.Token) (any, error) {
@@ -80,6 +89,12 @@ func (v *GoogleVerifier) Verify(ctx context.Context, rawToken string) (GoogleUse
 	}, nil
 }
 
+// signingKey returns the RSA signing key identified by kid.
+//
+// A cached key is used only while the complete JWKS cache is unexpired. On a
+// miss or expiry, the method refreshes all keys while holding v.mu so concurrent
+// verification cannot trigger duplicate refreshes. It returns an error if the
+// endpoint cannot be refreshed or the requested key is absent afterward.
 func (v *GoogleVerifier) signingKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -96,6 +111,15 @@ func (v *GoogleVerifier) signingKey(ctx context.Context, kid string) (*rsa.Publi
 	return key, nil
 }
 
+// refreshKeys replaces the verifier's cached signing keys from the JWKS endpoint.
+//
+// The response must be HTTP 200, and JSON decoding is limited to the first
+// 1 MiB. Only RSA RS256 signing keys with an identifier, an odd exponent of at
+// least three, and a modulus of at least 2048 bits are retained. At least one
+// usable key is required. On success, the cache lifetime comes from
+// Cache-Control max-age, capped at 24 hours, or defaults to one hour.
+//
+// The caller must hold v.mu while invoking refreshKeys.
 func (v *GoogleVerifier) refreshKeys(ctx context.Context) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.jwksURL, nil)
 	if err != nil {
@@ -158,6 +182,7 @@ func (v *GoogleVerifier) refreshKeys(ctx context.Context) error {
 	return nil
 }
 
+// jwksCacheDuration reads max-age from Cache-Control and caps the cache lifetime at 24 hours.
 func jwksCacheDuration(cacheControl string) time.Duration {
 	for _, directive := range strings.Split(cacheControl, ",") {
 		name, value, ok := strings.Cut(strings.TrimSpace(directive), "=")

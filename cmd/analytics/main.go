@@ -13,6 +13,7 @@ import (
 	"github.com/boycececil666gmailcom/Microservice-Auth-Platform/internal/analytics"
 )
 
+// main runs the analytics HTTP server and coordinates graceful shutdown.
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

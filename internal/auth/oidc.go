@@ -23,6 +23,7 @@ type GoogleUser struct {
 	Picture   string
 }
 
+// GenerateStateToken returns a cryptographically random URL-safe OAuth state value.
 func GenerateStateToken() (string, error) {
 	data := make([]byte, 32)
 	if _, err := rand.Read(data); err != nil {
@@ -31,6 +32,12 @@ func GenerateStateToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(data), nil
 }
 
+// BuildGoogleAuthURL constructs a Google OAuth authorization URL.
+//
+// clientID and redirectURI are copied into the query without validation. When
+// state is empty, the function generates a cryptographically random state value;
+// callers must retain that value from the returned URL and verify it during the
+// callback. An error is returned only when state generation fails.
 func BuildGoogleAuthURL(clientID, redirectURI, state string) (string, error) {
 	if state == "" {
 		var err error
@@ -51,6 +58,17 @@ func BuildGoogleAuthURL(clientID, redirectURI, state string) (string, error) {
 	return googleAuthEndpoint + "?" + query.Encode(), nil
 }
 
+// ExchangeGoogleCode exchanges a one-time Google authorization code for an ID token.
+//
+// code must be non-empty. redirectURI must match the URI used for authorization;
+// when it is empty, cfg.GoogleCallbackURL is used. The function submits the code
+// and client credentials to cfg.GoogleTokenURL with client, limits the response
+// body to 1 MiB, and returns the id_token field from a successful response.
+// Transport failures, non-200 responses, malformed JSON, and a missing ID token
+// are returned as errors.
+//
+// When mock OIDC is explicitly enabled, the function performs no network request
+// and returns a locally generated test token derived from code.
 func ExchangeGoogleCode(ctx context.Context, client *http.Client, cfg Config, code, redirectURI string) (string, error) {
 	if code == "" {
 		return "", errors.New("authorization code must not be empty")
@@ -101,6 +119,13 @@ func ExchangeGoogleCode(ctx context.Context, client *http.Client, cfg Config, co
 	return payload.IDToken, nil
 }
 
+// ParseMockGoogleIDToken extracts a GoogleUser from a locally generated mock token.
+//
+// It requires a three-part JWT-shaped value, decodes the payload, and validates
+// the email, subject, and email_verified claims. Missing names are derived from
+// the email address. The placeholder signature, issuer, audience, and expiry are
+// intentionally not verified, so this function must only be used behind the
+// explicit mock-OIDC configuration guard.
 func ParseMockGoogleIDToken(idToken string) (GoogleUser, error) {
 	if strings.TrimSpace(idToken) == "" {
 		return GoogleUser{}, errors.New("invalid Google ID Token format")
@@ -138,10 +163,16 @@ func ParseMockGoogleIDToken(idToken string) (GoogleUser, error) {
 	return GoogleUser{Email: email, GoogleSub: sub, Name: name, Picture: picture}, nil
 }
 
+// isMockGoogleConfig reports whether the explicit mock OIDC safeguards are both enabled.
 func isMockGoogleConfig(cfg Config) bool {
 	return cfg.AllowMockOIDC && strings.HasPrefix(cfg.GoogleClientID, "mock-")
 }
 
+// BuildMockGoogleIDToken creates a test-only Google-shaped ID token.
+//
+// The token contains the supplied audience and identity claims, a one-hour
+// lifetime, and a placeholder signature that is not cryptographically valid.
+// It must never be accepted by the production GoogleVerifier.
 func BuildMockGoogleIDToken(clientID, email, sub, name string) (string, error) {
 	header, err := json.Marshal(map[string]any{"alg": "RS256", "typ": "JWT", "kid": "mock_google_key"})
 	if err != nil {

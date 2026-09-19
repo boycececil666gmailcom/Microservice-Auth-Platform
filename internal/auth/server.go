@@ -51,6 +51,12 @@ type sessionData struct {
 	SSOProvider string `json:"sso_provider"`
 }
 
+// NewServer initializes an auth service and verifies its external dependencies.
+//
+// It parses cfg.PrivateKeyPEM, opens and pings PostgreSQL and Redis, creates the
+// users table and Google-subject uniqueness index when absent, and constructs
+// the HTTP client and Google token verifier. If any step fails, resources opened
+// by earlier steps are closed before the error is returned.
 func NewServer(ctx context.Context, cfg Config) (*Server, error) {
 	privateKey, err := ParsePrivateKey(cfg.PrivateKeyPEM)
 	if err != nil {
@@ -97,11 +103,13 @@ func NewServer(ctx context.Context, cfg Config) (*Server, error) {
 	}, nil
 }
 
+// Close releases the server's database and Redis resources.
 func (s *Server) Close() {
 	s.db.Close()
 	_ = s.redis.Close()
 }
 
+// Handler returns the HTTP handler containing all auth service routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
@@ -115,10 +123,12 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// health reports that the auth process is running.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ready checks the database and session store before reporting readiness.
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -133,11 +143,20 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+// jwks publishes the public signing key used to verify access tokens.
 func (s *Server) jwks(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=300")
 	httpjson.Write(w, http.StatusOK, PublicJWKS(&s.privateKey.PublicKey))
 }
 
+// login authenticates or registers a local email/password user.
+//
+// The JSON body must contain a syntactically valid email and a password of 8 to
+// 72 bytes. If the email is new, login hashes the password and inserts a local
+// user. A concurrent insert is handled by reloading the winning row and checking
+// its password. Existing users must pass bcrypt verification. On success, the
+// handler persists a refresh session, sets its cookie, and returns an access
+// token; validation, credential, and storage failures are written as HTTP errors.
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var body loginRequest
 	if err := httpjson.Decode(w, r, &body); err != nil {
@@ -191,6 +210,15 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	s.issueTokens(w, r, email, provider)
 }
 
+// refresh validates and atomically rotates the refresh token cookie.
+//
+// The presented bearer token is converted to its digest-based Redis key. Its
+// session payload must decode to an email and provider, and the referenced user
+// must still exist in PostgreSQL. The handler then creates a new access token
+// and refresh token. A Redis script deletes the old session and creates the new
+// one as a single operation, preventing concurrent reuse of the old token.
+// Success replaces the cookie and returns the access token; missing, expired,
+// reused, malformed, or orphaned sessions are rejected.
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("refresh_token")
 	if err != nil || cookie.Value == "" {
@@ -254,6 +282,7 @@ func (s *Server) refresh(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"access_token": accessToken})
 }
 
+// logout revokes the presented refresh session and expires its browser cookie.
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie("refresh_token"); err == nil && cookie.Value != "" {
 		if err := s.redis.Del(r.Context(), refreshTokenKey(cookie.Value)).Err(); err != nil {
@@ -268,6 +297,14 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"detail": "Logged out"})
 }
 
+// googleCallback completes the backend portion of the Google OIDC login flow.
+//
+// It decodes the authorization code, rejects unavailable production OIDC
+// configuration, exchanges the code for an ID token, and verifies that token
+// with either the explicitly enabled mock parser or GoogleVerifier. The verified
+// email is normalized before the Google subject is found, linked, or provisioned
+// in PostgreSQL. On success, the handler creates the same access and refresh
+// token pair used by local login.
 func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	var body googleCallbackRequest
 	if err := httpjson.Decode(w, r, &body); err != nil || body.Code == "" {
@@ -308,6 +345,13 @@ func (s *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
 	s.issueTokens(w, r, user.Email, "google_oidc")
 }
 
+// issueTokens creates and delivers a new access/refresh token pair.
+//
+// The refresh token itself is sent only in an HttpOnly cookie; Redis stores its
+// digest-derived key with the encoded email and provider for RefreshTokenTTL.
+// The access token is returned in the JSON response. Token generation,
+// serialization, or Redis failures are converted to an HTTP 500 response and
+// no success response is written.
 func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, email, provider string) {
 	accessToken, err := CreateAccessToken(s.privateKey, s.cfg.AccessTokenTTL, email, provider, time.Now().UTC())
 	if err != nil {
@@ -333,6 +377,13 @@ func (s *Server) issueTokens(w http.ResponseWriter, r *http.Request, email, prov
 	httpjson.Write(w, http.StatusOK, map[string]string{"access_token": accessToken})
 }
 
+// resolveGoogleIdentity maps a verified Google subject to one local email.
+//
+// An existing google_sub mapping takes precedence and its stored email is
+// returned. Otherwise, a missing email row is provisioned as a Google-only user,
+// while an existing unlinked email row is linked to googleSub. The function
+// refuses to replace a different Google subject already linked to that email.
+// PostgreSQL query and write failures are returned to the caller.
 func (s *Server) resolveGoogleIdentity(ctx context.Context, email, googleSub string) (string, error) {
 	var existingEmail string
 	err := s.db.QueryRow(ctx, "SELECT email FROM users WHERE google_sub = $1", googleSub).Scan(&existingEmail)
@@ -363,6 +414,7 @@ func (s *Server) resolveGoogleIdentity(ctx context.Context, email, googleSub str
 	return email, err
 }
 
+// setRefreshCookie writes the refresh token using the service's cookie security settings.
 func (s *Server) setRefreshCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name: "refresh_token", Value: token, Path: "/auth", HttpOnly: true,
@@ -371,6 +423,7 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string) {
 	})
 }
 
+// normalizeEmail canonicalizes an email address and rejects invalid or oversized input.
 func normalizeEmail(raw string) (string, bool) {
 	email := strings.ToLower(strings.TrimSpace(raw))
 	if len(email) == 0 || len(email) > 254 {

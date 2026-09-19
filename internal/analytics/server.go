@@ -26,6 +26,7 @@ type Server struct {
 	stats  Stats
 }
 
+// NewServer creates an analytics service configured to consume redirect events from Kafka.
 func NewServer() *Server {
 	broker := os.Getenv("KAFKA_BROKER_URL")
 	if broker == "" {
@@ -40,6 +41,7 @@ func NewServer() *Server {
 	}
 }
 
+// Handler returns the HTTP handler containing all analytics service routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
@@ -48,6 +50,12 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// Consume reads Kafka redirect events until ctx is canceled.
+//
+// Read failures are logged and retried after two seconds unless cancellation is
+// in progress. Each message must be valid JSON with event set to "redirect" and
+// a positive short_url; unsupported or malformed messages are logged and
+// skipped. Accepted events update the concurrency-safe in-memory counters.
 func (s *Server) Consume(ctx context.Context) {
 	for {
 		message, err := s.reader.ReadMessage(ctx)
@@ -79,16 +87,20 @@ func (s *Server) Consume(ctx context.Context) {
 	}
 }
 
+// Close releases the Kafka reader used by the service.
 func (s *Server) Close() error { return s.reader.Close() }
 
+// health reports that the analytics process is running.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ready reports that the analytics HTTP service is ready to receive requests.
 func (s *Server) ready(w http.ResponseWriter, _ *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+// recordRedirect increments the aggregate and per-short-URL redirect counts safely.
 func (s *Server) recordRedirect(shortURL int64) {
 	s.mu.Lock()
 	s.stats.TotalRedirects++
@@ -96,6 +108,10 @@ func (s *Server) recordRedirect(shortURL int64) {
 	s.mu.Unlock()
 }
 
+// getStats returns a consistent snapshot of the current redirect counters.
+//
+// The map is copied while holding a read lock so JSON encoding can proceed after
+// the lock is released without racing with the Kafka consumer.
 func (s *Server) getStats(w http.ResponseWriter, _ *http.Request) {
 	s.mu.RLock()
 	copy := Stats{

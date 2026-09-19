@@ -21,6 +21,11 @@ type accessClaims struct {
 	jwt.RegisteredClaims
 }
 
+// ParsePrivateKey parses an RSA private key from PKCS#8 PEM text.
+//
+// It rejects malformed PEM, non-PKCS#8 or non-RSA keys, RSA moduli smaller
+// than 2048 bits, and keys that fail rsa.PrivateKey.Validate. The returned key
+// is ready for RS256 signing.
 func ParsePrivateKey(keyPEM string) (*rsa.PrivateKey, error) {
 	block, _ := pem.Decode([]byte(keyPEM))
 	if block == nil {
@@ -43,6 +48,12 @@ func ParsePrivateKey(keyPEM string) (*rsa.PrivateKey, error) {
 	return rsaKey, nil
 }
 
+// CreateAccessToken signs an RS256 access token for an authenticated identity.
+//
+// email is written to both the subject and email claims, provider is written to
+// sso_provider, and now is used as the issued-at time. The token expires after
+// ttl and carries JWTKeyID in its kid header. An error is returned if RSA
+// signing fails.
 func CreateAccessToken(key *rsa.PrivateKey, ttl time.Duration, email, provider string, now time.Time) (string, error) {
 	claims := accessClaims{
 		Email:       email,
@@ -59,6 +70,7 @@ func CreateAccessToken(key *rsa.PrivateKey, ttl time.Duration, email, provider s
 	return token.SignedString(key)
 }
 
+// GenerateRefreshToken returns a cryptographically random URL-safe bearer token.
 func GenerateRefreshToken() (string, error) {
 	buffer := make([]byte, 48)
 	if _, err := rand.Read(buffer); err != nil {
@@ -67,11 +79,17 @@ func GenerateRefreshToken() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buffer), nil
 }
 
+// refreshTokenKey derives the non-reversible Redis key used to store a refresh session.
 func refreshTokenKey(token string) string {
 	digest := sha256.Sum256([]byte(token))
 	return "refresh_token:" + base64.RawURLEncoding.EncodeToString(digest[:])
 }
 
+// PublicJWKS converts key into the single-key JWKS published by the auth service.
+//
+// The result declares RS256 signing use and uses JWTKeyID, matching the kid
+// header produced by CreateAccessToken. The modulus and exponent are encoded
+// with unpadded base64url as required by the JWK representation.
 func PublicJWKS(key *rsa.PublicKey) map[string]any {
 	exponent := key.E
 	exponentBytes := make([]byte, 0, 4)

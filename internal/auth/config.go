@@ -23,6 +23,12 @@ type Config struct {
 	GoogleJWKSURL      string
 }
 
+// ConfigFromEnv loads auth service configuration from environment variables.
+//
+// DATABASE_URL, REDIS_URL, and either JWT_PRIVATE_KEY or
+// RSA_PRIVATE_KEY_PEM are required. Optional durations and Boolean settings
+// fall back to their defaults when unset or invalid. The private key text is
+// only checked for presence here; NewServer performs cryptographic validation.
 func ConfigFromEnv() (Config, error) {
 	databaseURL := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if databaseURL == "" {
@@ -52,6 +58,7 @@ func ConfigFromEnv() (Config, error) {
 	}, nil
 }
 
+// envOr returns the named environment variable or fallback when it is unset.
 func envOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
@@ -59,6 +66,7 @@ func envOr(name, fallback string) string {
 	return fallback
 }
 
+// envInt returns a positive integer environment value or fallback when it is absent or invalid.
 func envInt(name string, fallback int) int {
 	value, err := strconv.Atoi(os.Getenv(name))
 	if err != nil || value <= 0 {
@@ -67,6 +75,7 @@ func envInt(name string, fallback int) int {
 	return value
 }
 
+// envBool returns a Boolean environment value or fallback when it is absent or invalid.
 func envBool(name string, fallback bool) bool {
 	value := os.Getenv(name)
 	if value == "" {
@@ -79,6 +88,7 @@ func envBool(name string, fallback bool) bool {
 	return parsed
 }
 
+// firstNonEmpty returns the first non-empty value, or an empty string when none is present.
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if value != "" {

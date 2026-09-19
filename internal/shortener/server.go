@@ -46,6 +46,11 @@ type Server struct {
 	cancelProducer context.CancelFunc
 }
 
+// ConfigFromEnv loads shortener service configuration from environment variables.
+//
+// DATABASE_URL and REDIS_URL are required. KAFKA_BROKER_URL defaults to the
+// in-cluster Kafka address, while an absent, non-numeric, or non-positive
+// CACHE_TTL_SECONDS value defaults to 24 hours.
 func ConfigFromEnv() (Config, error) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -67,6 +72,12 @@ func ConfigFromEnv() (Config, error) {
 	}, nil
 }
 
+// NewServer initializes the shortener and verifies its external data stores.
+//
+// It opens and pings PostgreSQL and Redis, creates the urls table when absent,
+// configures the Kafka writer, and starts one background analytics publisher.
+// If initialization fails before the Server is returned, every resource opened
+// by an earlier step is closed.
 func NewServer(ctx context.Context, config Config) (*Server, error) {
 	db, err := pgxpool.New(ctx, config.DatabaseURL)
 	if err != nil {
@@ -111,6 +122,12 @@ func NewServer(ctx context.Context, config Config) (*Server, error) {
 	return server, nil
 }
 
+// Close stops event publishing and releases all external resources.
+//
+// Canceling producerCtx makes the publisher stop promptly rather than flushing
+// every queued event. Close then closes the queue, waits for the worker, and
+// closes PostgreSQL, Redis, and Kafka. It must be called only once and only after
+// request handlers have stopped enqueueing events.
 func (s *Server) Close() {
 	s.cancelProducer()
 	close(s.events)
@@ -120,6 +137,7 @@ func (s *Server) Close() {
 	_ = s.kafka.Close()
 }
 
+// Handler returns the HTTP handler containing all shortener service routes.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", s.health)
@@ -130,10 +148,12 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// health reports that the shortener process is running.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// ready checks PostgreSQL and Redis before reporting readiness.
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
@@ -148,6 +168,13 @@ func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
+// shorten creates or retrieves the stable short record for a destination URL.
+//
+// The JSON body must contain an absolute, credential-free HTTP(S) URL within the
+// configured size limit. PostgreSQL's unique constraint makes repeated requests
+// for the same destination reuse its identifier. After reading the stored row,
+// the handler attempts to pre-warm Redis; a cache failure is logged but does not
+// fail the successful database operation or response.
 func (s *Server) shorten(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		LongURL string `json:"long_url"`
@@ -175,6 +202,7 @@ func (s *Server) shorten(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusCreated, record)
 }
 
+// lookup resolves a short URL identifier and returns its stored URL record.
 func (s *Server) lookup(w http.ResponseWriter, r *http.Request) {
 	record, status, err := s.resolve(r.Context(), r.PathValue("shortURL"))
 	if err != nil {
@@ -184,6 +212,7 @@ func (s *Server) lookup(w http.ResponseWriter, r *http.Request) {
 	httpjson.Write(w, http.StatusOK, record)
 }
 
+// redirect resolves a short URL, queues an analytics event, and redirects the client.
 func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	record, status, err := s.resolve(r.Context(), r.PathValue("shortURL"))
 	if err != nil {
@@ -194,6 +223,16 @@ func (s *Server) redirect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, record.LongURL, http.StatusFound)
 }
 
+// resolve validates a short identifier and loads its URL record.
+//
+// A positive base-10 integer is required. Redis is checked first; cache misses,
+// malformed entries, and Redis failures fall back to PostgreSQL. A successful
+// database lookup is written back to the cache on a best-effort basis.
+//
+// On success, status is zero. On failure, status is the HTTP status the caller
+// should send: 422 for an invalid identifier, 404 for a missing row, or 500 for
+// another database failure. The accompanying error is intended for control flow
+// and logging, not direct disclosure to clients.
 func (s *Server) resolve(ctx context.Context, value string) (URLRecord, int, error) {
 	shortURL, err := strconv.ParseInt(value, 10, 64)
 	if err != nil || shortURL <= 0 {
@@ -219,6 +258,7 @@ func (s *Server) resolve(ctx context.Context, value string) (URLRecord, int, err
 	return record, 0, nil
 }
 
+// getByLongURL loads a URL record from PostgreSQL by its destination URL.
 func (s *Server) getByLongURL(ctx context.Context, longURL string) (URLRecord, error) {
 	var record URLRecord
 	err := s.db.QueryRow(ctx,
@@ -227,6 +267,7 @@ func (s *Server) getByLongURL(ctx context.Context, longURL string) (URLRecord, e
 	return record, err
 }
 
+// getByID loads a URL record from PostgreSQL by its numeric short URL.
 func (s *Server) getByID(ctx context.Context, shortURL int64) (URLRecord, error) {
 	var record URLRecord
 	err := s.db.QueryRow(ctx,
@@ -235,6 +276,11 @@ func (s *Server) getByID(ctx context.Context, shortURL int64) (URLRecord, error)
 	return record, err
 }
 
+// getCached loads and decodes a URL record from Redis.
+//
+// redis.Nil is returned unchanged so callers can distinguish a cache miss. If a
+// cached value is not valid URLRecord JSON, the corrupt entry is deleted on a
+// best-effort basis and the decoding error is returned.
 func (s *Server) getCached(ctx context.Context, shortURL int64) (URLRecord, error) {
 	raw, err := s.redis.Get(ctx, cacheKey(shortURL)).Bytes()
 	if err != nil {
@@ -248,6 +294,7 @@ func (s *Server) getCached(ctx context.Context, shortURL int64) (URLRecord, erro
 	return record, nil
 }
 
+// setCached encodes a URL record and stores it in Redis for the configured TTL.
 func (s *Server) setCached(ctx context.Context, record URLRecord) error {
 	payload, err := json.Marshal(record)
 	if err != nil {
@@ -256,6 +303,11 @@ func (s *Server) setCached(ctx context.Context, record URLRecord) error {
 	return s.redis.Set(ctx, cacheKey(record.ShortURL), payload, s.config.CacheTTL).Err()
 }
 
+// enqueueAnalytics attempts to queue a redirect event without blocking the request.
+//
+// If the bounded channel is full, the event is deliberately dropped and a
+// warning is logged. Redirect availability therefore does not depend on Kafka
+// throughput, at the cost of potentially incomplete analytics during overload.
 func (s *Server) enqueueAnalytics(shortURL int64) {
 	select {
 	case s.events <- shortURL:
@@ -264,6 +316,13 @@ func (s *Server) enqueueAnalytics(shortURL int64) {
 	}
 }
 
+// publishAnalytics drains redirect events and publishes them to Kafka.
+//
+// Each event is encoded as a redirect message and attempted at most three times.
+// Every write has a five-second timeout, with exponential backoff beginning at
+// 250 milliseconds between failures. Cancellation stops an active retry loop and
+// exits without draining the remaining queue. The worker records completion in
+// s.workers so Close can wait for it.
 func (s *Server) publishAnalytics() {
 	defer s.workers.Done()
 	for {
@@ -302,8 +361,10 @@ func (s *Server) publishAnalytics() {
 	}
 }
 
+// cacheKey returns the Redis key for a numeric short URL.
 func cacheKey(shortURL int64) string { return "url:" + strconv.FormatInt(shortURL, 10) }
 
+// validHTTPURL reports whether raw is an absolute, credential-free HTTP(S) URL within the size limit.
 func validHTTPURL(raw string) bool {
 	if len(raw) == 0 || len(raw) > maxURLLength {
 		return false
@@ -313,6 +374,7 @@ func validHTTPURL(raw string) bool {
 		(parsed.Scheme == "http" || parsed.Scheme == "https")
 }
 
+// errorDetail maps a resolution status to its public error message.
 func errorDetail(status int) string {
 	if status == http.StatusNotFound {
 		return "Short URL not found"
@@ -323,6 +385,7 @@ func errorDetail(status int) string {
 	return "Internal server error"
 }
 
+// envOr returns the named environment variable or fallback when it is unset.
 func envOr(name, fallback string) string {
 	if value := os.Getenv(name); value != "" {
 		return value
