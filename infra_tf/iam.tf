@@ -23,6 +23,11 @@ resource "aws_iam_role_policy_attachment" "shortener_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "shortener_vpc" {
+  role       = aws_iam_role.shortener_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 resource "aws_iam_role_policy" "shortener_sqs" {
   name = "${var.app_name}-shortener-sqs-publish"
   role = aws_iam_role.shortener_lambda.id
@@ -49,6 +54,11 @@ resource "aws_iam_role" "analytics_lambda" {
 resource "aws_iam_role_policy_attachment" "analytics_basic" {
   role       = aws_iam_role.analytics_lambda.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "analytics_vpc" {
+  role       = aws_iam_role.analytics_lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy" "analytics_sqs" {

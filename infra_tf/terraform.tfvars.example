@@ -1,11 +1,5 @@
-# AWS Configuration
-aws_region  = "us-east-1"
-environment = "dev"
-app_name    = "url-shortener"
-
-# Data Stores
-database_url = "postgresql://postgres:postgres@localhost:5432/urlshortener?sslmode=disable"
-redis_url    = "redis://localhost:6379"
-
-# Logging
+# AWS Deployment Configuration
+aws_region         = "us-east-1"
+environment        = "dev"
+app_name           = "url-shortener"
 log_retention_days = 14

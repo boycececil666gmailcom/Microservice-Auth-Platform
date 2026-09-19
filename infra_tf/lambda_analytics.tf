@@ -23,6 +23,11 @@ resource "aws_lambda_function" "analytics" {
   filename         = fileexists("${path.module}/../bin/analytics.zip") ? "${path.module}/../bin/analytics.zip" : data.archive_file.analytics_placeholder.output_path
   source_code_hash = fileexists("${path.module}/../bin/analytics.zip") ? filebase64sha256("${path.module}/../bin/analytics.zip") : data.archive_file.analytics_placeholder.output_base64sha256
 
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
   environment {
     variables = {
       SQS_QUEUE_URL = aws_sqs_queue.url_redirects.url
@@ -32,7 +37,8 @@ resource "aws_lambda_function" "analytics" {
 
   depends_on = [
     aws_cloudwatch_log_group.analytics,
-    aws_iam_role_policy_attachment.analytics_basic
+    aws_iam_role_policy_attachment.analytics_basic,
+    aws_iam_role_policy_attachment.analytics_vpc
   ]
 }
 

@@ -38,3 +38,32 @@ output "sqs_queue_arn" {
   description = "ARN of the URL redirect events SQS queue."
 }
 #endregion
+
+#region Database Outputs
+output "rds_endpoint" {
+  value       = aws_db_instance.postgres.endpoint
+  description = "Endpoint address and port for the PostgreSQL RDS instance."
+}
+
+output "rds_database_name" {
+  value       = aws_db_instance.postgres.db_name
+  description = "Database name on the PostgreSQL RDS instance."
+}
+
+output "elasticache_endpoint" {
+  value       = "${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}"
+  description = "Connection endpoint for ElastiCache Redis."
+}
+#endregion
+
+#region Network Outputs
+output "vpc_id" {
+  value       = aws_vpc.main.id
+  description = "ID of the VPC."
+}
+
+output "private_subnet_ids" {
+  value       = aws_subnet.private[*].id
+  description = "IDs of the private subnets."
+}
+#endregion

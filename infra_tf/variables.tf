@@ -16,21 +16,6 @@ variable "app_name" {
   description = "Application name prefix used across resources."
   default     = "url-shortener"
 }
-#endregion
-
-#region Service Variables
-variable "database_url" {
-  type        = string
-  description = "PostgreSQL connection string for the URL shortener service."
-  sensitive   = true
-  default     = "postgresql://postgres:postgres@localhost:5432/urlshortener?sslmode=disable"
-}
-
-variable "redis_url" {
-  type        = string
-  description = "Redis connection string for URL shortener cache."
-  default     = "redis://localhost:6379"
-}
 
 variable "log_retention_days" {
   type        = number
