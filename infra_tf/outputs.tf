@@ -67,3 +67,15 @@ output "private_subnet_ids" {
   description = "IDs of the private subnets."
 }
 #endregion
+
+#region Application Outputs
+output "application_arn" {
+  value       = aws_resourcegroups_group.application.arn
+  description = "ARN of the AWS Application Resource Group."
+}
+
+output "application_name" {
+  value       = aws_resourcegroups_group.application.name
+  description = "Name of the application."
+}
+#endregion

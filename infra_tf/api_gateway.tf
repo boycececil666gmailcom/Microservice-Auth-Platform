@@ -71,6 +71,12 @@ resource "aws_apigatewayv2_route" "health" {
   target    = "integrations/${aws_apigatewayv2_integration.shortener.id}"
 }
 
+resource "aws_apigatewayv2_route" "ready" {
+  api_id    = aws_apigatewayv2_api.http_api.id
+  route_key = "GET /ready"
+  target    = "integrations/${aws_apigatewayv2_integration.shortener.id}"
+}
+
 resource "aws_apigatewayv2_route" "stats_v1" {
   api_id    = aws_apigatewayv2_api.http_api.id
   route_key = "GET /api/v1/analytics/stats"

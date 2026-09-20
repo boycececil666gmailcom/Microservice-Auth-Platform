@@ -30,6 +30,7 @@ resource "aws_lambda_function" "analytics" {
 
   environment {
     variables = {
+      REDIS_URL     = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}"
       SQS_QUEUE_URL = aws_sqs_queue.url_redirects.url
       ENVIRONMENT   = var.environment
     }
@@ -38,7 +39,8 @@ resource "aws_lambda_function" "analytics" {
   depends_on = [
     aws_cloudwatch_log_group.analytics,
     aws_iam_role_policy_attachment.analytics_basic,
-    aws_iam_role_policy_attachment.analytics_vpc
+    aws_iam_role_policy_attachment.analytics_vpc,
+    aws_elasticache_cluster.redis
   ]
 }
 

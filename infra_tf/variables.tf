@@ -22,4 +22,10 @@ variable "log_retention_days" {
   description = "Retention period in days for Lambda CloudWatch logs."
   default     = 14
 }
+
+variable "aws_account_id" {
+  type        = string
+  description = "AWS Account ID used for application resource group ARNs."
+  default     = "946634249757"
+}
 #endregion

@@ -30,7 +30,7 @@ resource "aws_lambda_function" "shortener" {
 
   environment {
     variables = {
-      DATABASE_URL  = "postgresql://${aws_db_instance.postgres.username}:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/${aws_db_instance.postgres.db_name}?sslmode=disable"
+      DATABASE_URL  = "postgresql://${aws_db_instance.postgres.username}:${random_password.db_password.result}@${aws_db_instance.postgres.endpoint}/${aws_db_instance.postgres.db_name}?sslmode=require"
       REDIS_URL     = "redis://${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}"
       SQS_QUEUE_URL = aws_sqs_queue.url_redirects.url
       ENVIRONMENT   = var.environment

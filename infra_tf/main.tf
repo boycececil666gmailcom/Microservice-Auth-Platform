@@ -21,13 +21,16 @@ terraform {
 
 #region AWS Provider
 provider "aws" {
-  region = var.aws_region
+  region  = var.aws_region
+  profile = "terraform-deployer"
 
   default_tags {
     tags = {
-      Project     = var.app_name
-      Environment = var.environment
-      ManagedBy   = "Terraform"
+      Project        = var.app_name
+      Environment    = var.environment
+      ManagedBy      = "Terraform"
+      Application    = "${var.app_name}-${var.environment}"
+      awsApplication = "arn:aws:resource-groups:${var.aws_region}:${var.aws_account_id}:group/${var.app_name}-${var.environment}"
     }
   }
 }

@@ -1,0 +1,147 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowVPCNetworking",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*Vpc*",
+        "ec2:*Subnet*",
+        "ec2:*InternetGateway*",
+        "ec2:*RouteTable*",
+        "ec2:*SecurityGroup*",
+        "ec2:Describe*",
+        "ec2:CreateTags",
+        "ec2:DeleteTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowRDSPostgres",
+      "Effect": "Allow",
+      "Action": [
+        "rds:*DBInstance*",
+        "rds:*DBSubnetGroup*",
+        "rds:ListTagsForResource",
+        "rds:AddTagsToResource",
+        "rds:RemoveTagsFromResource",
+        "rds:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowElastiCacheRedis",
+      "Effect": "Allow",
+      "Action": [
+        "elasticache:*CacheCluster*",
+        "elasticache:*CacheSubnetGroup*",
+        "elasticache:ListTagsForResource",
+        "elasticache:AddTagsToResource",
+        "elasticache:RemoveTagsFromResource",
+        "elasticache:Describe*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowSQSMessaging",
+      "Effect": "Allow",
+      "Action": [
+        "sqs:*Queue*",
+        "sqs:GetQueueAttributes",
+        "sqs:SetQueueAttributes",
+        "sqs:TagQueue",
+        "sqs:UntagQueue",
+        "sqs:ListQueues",
+        "sqs:ListQueueTags"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowLambdaAndAPIGateway",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:*",
+        "apigateway:*",
+        "logs:CreateLogGroup",
+        "logs:DeleteLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:PutRetentionPolicy",
+        "logs:CreateLogDelivery",
+        "logs:GetLogDelivery",
+        "logs:UpdateLogDelivery",
+        "logs:DeleteLogDelivery",
+        "logs:ListLogDeliveries",
+        "logs:PutResourcePolicy",
+        "logs:DescribeResourcePolicies",
+        "logs:ListTagsForResource",
+        "logs:TagResource",
+        "logs:UntagResource",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents",
+        "logs:DescribeLogStreams"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowAppRegistryAndResourceGroups",
+      "Effect": "Allow",
+      "Action": [
+        "servicecatalog:*",
+        "servicecatalog-appregistry:*",
+        "resource-groups:*",
+        "tag:GetResources",
+        "tag:GetTagKeys",
+        "tag:GetTagValues",
+        "tag:TagResources",
+        "tag:UntagResources"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowScopedIAMRoleCreation",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:GetRole",
+        "iam:GetRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/url-shortener-*"
+    },
+    {
+      "Sid": "AllowServiceLinkedRoles",
+      "Effect": "Allow",
+      "Action": "iam:CreateServiceLinkedRole",
+      "Resource": "arn:aws:iam::*:role/aws-service-role/*"
+    },
+    {
+      "Sid": "AllowIAMPolicyInspection",
+      "Effect": "Allow",
+      "Action": [
+        "iam:GetPolicy",
+        "iam:GetPolicyVersion",
+        "iam:ListPolicies"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowPassRoleToLambda",
+      "Effect": "Allow",
+      "Action": "iam:PassRole",
+      "Resource": "arn:aws:iam::*:role/url-shortener-*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "lambda.amazonaws.com"
+        }
+      }
+    }
+  ]
+}

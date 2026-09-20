@@ -53,7 +53,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [auth, shortener, analytics]
+        service: [shortener, analytics]
     steps:
       - uses: actions/checkout@v7
       - uses: docker/setup-buildx-action@v4

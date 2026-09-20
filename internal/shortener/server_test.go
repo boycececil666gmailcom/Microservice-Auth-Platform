@@ -37,11 +37,12 @@ func TestConfigFromEnvRequiresDataStores(t *testing.T) {
 
 	t.Setenv("DATABASE_URL", "postgresql://localhost/shortener")
 	t.Setenv("REDIS_URL", "redis://localhost:6379")
+	t.Setenv("SQS_QUEUE_URL", "https://sqs.us-east-1.amazonaws.com/123456789012/test-queue")
 	config, err := ConfigFromEnv()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if config.CacheTTL <= 0 || config.KafkaBroker == "" {
+	if config.CacheTTL <= 0 || config.SQSQueueURL == "" {
 		t.Fatalf("invalid defaults: %#v", config)
 	}
 }
