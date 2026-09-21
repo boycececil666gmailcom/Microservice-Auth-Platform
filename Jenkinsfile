@@ -60,11 +60,7 @@ pipeline {
 
         stage('Deploy Infrastructure') {
             when {
-                anyOf {
-                    branch 'master'
-                    branch 'main'
-                    branch 'GO-AWS-Lambda'
-                }
+                branch 'master'
             }
             steps {
                 echo '[Pipeline-Deploy] Applying Terraform to AWS...'
@@ -75,11 +71,7 @@ pipeline {
 
         stage('Live E2E Tests') {
             when {
-                anyOf {
-                    branch 'master'
-                    branch 'main'
-                    branch 'GO-AWS-Lambda'
-                }
+                branch 'master'
             }
             steps {
                 echo '[Pipeline-E2E] Executing live E2E tests against API Gateway...'
