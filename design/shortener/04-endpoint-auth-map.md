@@ -1,49 +1,52 @@
 # Endpoint Authentication & Routing Map
 
-This document outlines the authentication requirements for all endpoints exposed by the API Gateway and details how requests are routed to downstream services.
+This document outlines the architecture, routing rules, and authentication specifications for all endpoints exposed by Amazon API Gateway to downstream AWS Lambda microservices.
 
-## 1. Routing & Authentication Architecture
+## 1. Routing & Architecture
 
-The Gateway acts as the single entrypoint for external clients. It enforces JWT verification for versioned business resource routes while bypassing verification for public assets, redirects, and session management routes.
+Amazon API Gateway (HTTP API v2) acts as the unified entrypoint for clients, proxying requests directly to backend AWS Lambda functions via `AWS_PROXY` integrations. Asynchronous analytics events are dispatched via Amazon SQS.
 
-```
-                         ┌─────────────────────────┐
-                         │   Incoming HTTP Request │
-                         └────────────┬────────────┘
-                                      │
-                                      ▼
-                      ┌───────────────────────────────┐
-                      │      API Gateway (8000)       │
-                      └──────────────┬────────────────┘
-                                     │
-             ┌───────────────────────┴───────────────────────┐
-             │                                               │
-             ▼                                               ▼
-  [ JWT AUTHENTICATED ]                           [ NO JWT REQUIRED ]
-     (Protected API)                            (Public & Session API)
-             │                                               │
-   ┌─────────┼─────────┐                           ┌─────────┼─────────┬─────────┐
-   │         │         │                           │         │         │         │
-   ▼         ▼         ▼                           ▼         ▼         ▼         ▼
- POST       GET       GET                         POST      POST      POST      GET
-/api/v1/  /api/v1/  /api/v1/                     /auth/    /auth/    /auth/     /r/
-shorten   urls/{id} analytics                    login     refresh   logout    {id}
-   │         │         │                           │         │         │         │
-   ▼         ▼         ▼                           ▼         ▼         ▼         ▼
-[Shortener] [Shortener] [Analytics]               [Auth]    [Auth]    [Auth]  [Shortener]
- (:8001)   (:8001)     (:8003)                   (:8002)   (:8002)   (:8002)   (:8001)
+```text
++----------------------------------------------------------------------------+
+| AWS Serverless Architecture & Routing Map                                  |
++----------------------------------------------------------------------------+
+| Client Request (HTTPS)                                                     |
+|                            |                                               |
+|                            v                                               |
+|          +----------------------------------+                              |
+|          | Amazon API Gateway (HTTP API v2) |                              |
+|          +-----------------+----------------+                              |
+|                            |                                               |
+|            +---------------+---------------+                               |
+|            |                               |                               |
+|            v (AWS_PROXY)                   v (AWS_PROXY)                   |
+| +----------------------+        +-----------------------+                  |
+| | Shortener Lambda     |        | Analytics Lambda      |                  |
+| | (provided.al2023)    |        | (provided.al2023)     |                  |
+| +----------+-----------+        +-----------+-----------+                  |
+|            |                                ^                              |
+|            | SQS SendMessage                | SQS Trigger                  |
+|            +-----------> [ SQS Queue ] -----+                              |
++----------------------------------------------------------------------------+
 ```
 
 ## 2. Endpoint Specifications
 
 | Method | Endpoint Path | Auth Type | Target Upstream Service | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| **GET** | `/health` | None | Gateway Internal | Performs Gateway health verification. |
-| **GET** | `/.well-known/jwks.json` | None | `http://auth:8002/.well-known/jwks.json` | Publishes the current RSA verification key for gateway JWT validation. |
-| **POST** | `/auth/login` | None | `http://auth:8002/auth/login` | Registers or authenticates a user; returns a JWT access token in the response body and stores a refresh token in an `HttpOnly` cookie. |
-| **POST** | `/auth/refresh` | Refresh Cookie | `http://auth:8002/auth/refresh` | Consumes the `refresh_token` cookie to issue a new short-lived JWT access token. |
-| **POST** | `/auth/logout` | Refresh Cookie | `http://auth:8002/auth/logout` | Revokes the active refresh token and clears the client's cookie. |
-| **POST** | `/api/v1/shorten` | JWT Bearer | `http://shortener:8001/shorten` | Generates a shortened URL representation of the supplied destination URL. |
-| **GET** | `/api/v1/urls/{short_url}` | JWT Bearer | `http://shortener:8001/urls/{short_url}` | Retrieves the original target URL and creation metadata for a short URL ID. |
-| **GET** | `/api/v1/analytics/stats` | JWT Bearer | `http://analytics:8003/stats` | Returns system-wide statistics and redirect frequency per short URL. |
-| **GET** | `/r/{short_url}` | None | `http://shortener:8001/r/{short_url}` | Public redirect endpoint forwarding user requests to the destination URL. |
+| **GET** | `/health` | None | `url-shortener-shortener-dev` | Liveness check verifying shortener service and database connectivity. |
+| **GET** | `/ready` | None | `url-shortener-shortener-dev` | Readiness check verifying external dependency status. |
+| **POST** | `/api/v1/shorten` | Public (Dev) / IAM / JWT | `url-shortener-shortener-dev` | Creates a new shortened URL entry in PostgreSQL and warms Redis. |
+| **GET** | `/api/v1/urls/{shortURL}` | Public (Dev) / IAM / JWT | `url-shortener-shortener-dev` | Retrieves original target URL metadata (reads Redis cache-aside or PostgreSQL). |
+| **GET** | `/r/{shortURL}` | None | `url-shortener-shortener-dev` | Public 302 redirect endpoint; dispatches asynchronous tracking event to SQS. |
+| **GET** | `/stats` | None | `url-shortener-analytics-dev` | Root path statistics query returning total redirects and counts per short URL. |
+| **GET** | `/api/v1/analytics/stats` | Public (Dev) / IAM / JWT | `url-shortener-analytics-dev` | Versioned analytics statistics endpoint querying ElastiCache Redis counters. |
+
+## 3. Asynchronous Event Pipeline
+
+| Component | Technology | Payload Schema | Action |
+| :--- | :--- | :--- | :--- |
+| **Publisher** | Shortener Lambda | `{"short_url": 12345, "event": "redirect"}` | Dispatched via AWS SDK v2 SQS `SendMessage` |
+| **Queue** | Amazon SQS (`url-shortener-redirects-dev`) | Standard JSON | Message retention with Dead-Letter Queue (DLQ) |
+| **Consumer** | Analytics Lambda | SQS Event Batch | Ingested via Lambda Event Source Mapping (`batch_size = 10`) |
+| **Store** | ElastiCache Redis 7 | Redis Hash / Key | `analytics:total_redirects` and `analytics:redirects_by_short_url` |
