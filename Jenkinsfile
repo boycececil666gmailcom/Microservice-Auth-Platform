@@ -2,9 +2,7 @@ pipeline {
     agent any
 
     environment {
-        CGO_ENABLED = '0'
-        GOOS        = 'linux'
-        GOARCH      = 'arm64'
+        CGO_ENABLED = '1'
     }
 
     stages {
@@ -28,7 +26,7 @@ pipeline {
                 echo '[Pipeline-Build] Compiling Shortener Lambda (arm64)...'
                 sh '''
                     mkdir -p bin
-                    go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/shortener
+                    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/shortener
                     if command -v zip >/dev/null 2>&1; then
                         zip -q -j bin/shortener.zip bootstrap
                     else
@@ -38,7 +36,7 @@ pipeline {
                 '''
                 echo '[Pipeline-Build] Compiling Analytics Lambda (arm64)...'
                 sh '''
-                    go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/analytics
+                    CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/analytics
                     if command -v zip >/dev/null 2>&1; then
                         zip -q -j bin/analytics.zip bootstrap
                     else
