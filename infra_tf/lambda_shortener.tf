@@ -17,7 +17,7 @@ resource "aws_lambda_function" "shortener" {
   handler       = "bootstrap"
   runtime       = "provided.al2023"
   architectures = ["arm64"]
-  memory_size   = 256
+  memory_size   = 128
   timeout       = 15
 
   filename         = fileexists("${path.module}/../bin/shortener.zip") ? "${path.module}/../bin/shortener.zip" : data.archive_file.shortener_placeholder.output_path

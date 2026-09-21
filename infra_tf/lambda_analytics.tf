@@ -17,7 +17,7 @@ resource "aws_lambda_function" "analytics" {
   handler       = "bootstrap"
   runtime       = "provided.al2023"
   architectures = ["arm64"]
-  memory_size   = 256
+  memory_size   = 128
   timeout       = 15
 
   filename         = fileexists("${path.module}/../bin/analytics.zip") ? "${path.module}/../bin/analytics.zip" : data.archive_file.analytics_placeholder.output_path

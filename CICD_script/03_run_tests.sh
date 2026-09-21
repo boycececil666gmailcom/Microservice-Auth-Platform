@@ -4,55 +4,43 @@ set -euo pipefail
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$SCRIPT_DIR/.."
-NAMESPACE="${NAMESPACE:-url-shortener}"
+TF_DIR="$ROOT_DIR/infra_tf"
 
-get_pod_name() {
-    local selector=$1
-    kubectl get pods -n "$NAMESPACE" -l "$selector" -o jsonpath="{.items[0].metadata.name}" 2>/dev/null
-}
-
-echo "========================================================"
-echo "3. Flushing Databases and Executing Test Suite"
-echo "========================================================"
-
-echo "Flushing Shortener PostgreSQL..."
-SHORTENER_DB_POD=$(get_pod_name "app=shortener-db")
-kubectl exec -n "$NAMESPACE" "$SHORTENER_DB_POD" -- psql -U postgres -c "CREATE DATABASE urlshortener;" 2>/dev/null || true
-kubectl exec -n "$NAMESPACE" "$SHORTENER_DB_POD" -- psql -U postgres -d urlshortener -c "TRUNCATE TABLE urls RESTART IDENTITY CASCADE;"
-
-echo "Flushing Shortener Redis..."
-SHORTENER_REDIS_POD=$(get_pod_name "app=shortener-redis")
-kubectl exec -n "$NAMESPACE" "$SHORTENER_REDIS_POD" -- redis-cli FLUSHALL
-
-echo "[OK] Databases and caches flushed."
-echo
-
-PORT_FORWARD_PID=""
-cleanup() {
-    if [[ -n "$PORT_FORWARD_PID" ]]; then
-        kill "$PORT_FORWARD_PID" 2>/dev/null || true
-        wait "$PORT_FORWARD_PID" 2>/dev/null || true
-    fi
-}
-trap cleanup EXIT
-
-if [[ -z "${GATEWAY_URL:-}" ]]; then
-    export GATEWAY_URL="http://localhost:8000"
-    kubectl port-forward -n "$NAMESPACE" service/gateway 8000:8000 >/tmp/microservice-auth-port-forward.log 2>&1 &
-    PORT_FORWARD_PID=$!
-    for _ in {1..30}; do
-        if curl --fail --silent "$GATEWAY_URL/health" >/dev/null; then
-            break
-        fi
-        sleep 1
-    done
-    curl --fail --silent "$GATEWAY_URL/health" >/dev/null
+# Detect terraform binary (supports Linux native and Windows WSL)
+TF_CMD="terraform"
+if command -v terraform >/dev/null 2>&1; then
+    TF_CMD="terraform"
+elif command -v terraform.exe >/dev/null 2>&1; then
+    TF_CMD="terraform.exe"
 fi
 
-echo "========================================================"
-echo "4. Running Full Go Test Suite (Unit & E2E)"
-echo "========================================================"
+echo -e "\n\033[1;96m========================================================\033[0m"
+echo -e "\033[1;92m>>> [1/2] [$(basename "$0")] Running Go Unit Tests & Static Analysis\033[0m"
+echo -e "\033[1;96m========================================================\033[0m\n"
 
 cd "$ROOT_DIR"
-go test ./...
-go test -tags=e2e ./tests/e2e/ -v
+go vet ./...
+go test -race -v ./...
+
+echo -e "\n\033[1;96m========================================================\033[0m"
+echo -e "\033[1;92m>>> [2/2] [$(basename "$0")] Executing Live E2E Tests on AWS API Gateway\033[0m"
+echo -e "\033[1;96m========================================================\033[0m\n"
+
+if [[ -z "${GATEWAY_URL:-}" ]]; then
+    if [[ -d "$TF_DIR" ]]; then
+        ENDPOINT=$(cd "$TF_DIR" && "$TF_CMD" output -raw api_endpoint 2>/dev/null | tr -d '\r' | sed 's:/*$::' || true)
+        if [[ -n "$ENDPOINT" ]]; then
+            export GATEWAY_URL="$ENDPOINT"
+            echo "Using API Gateway URL from Terraform: $GATEWAY_URL"
+        fi
+    fi
+fi
+
+if [[ -z "${GATEWAY_URL:-}" ]]; then
+    echo "GATEWAY_URL not set and terraform output unavailable; defaulting to http://localhost:8000"
+    export GATEWAY_URL="http://localhost:8000"
+fi
+
+go test -tags=e2e -count=1 ./tests/e2e/ -v
+
+echo -e "\n\033[1;92m[OK] All Unit and E2E Tests passed successfully.\033[0m\n"
