@@ -57,9 +57,6 @@ pipeline {
         }
 
         stage('Deploy Infrastructure') {
-            when {
-                branch 'master'
-            }
             steps {
                 echo '[Pipeline-Deploy] Applying Terraform to AWS...'
                 sh 'terraform -chdir=infra_tf init -input=false'
@@ -68,9 +65,6 @@ pipeline {
         }
 
         stage('Live E2E Tests') {
-            when {
-                branch 'master'
-            }
             steps {
                 echo '[Pipeline-E2E] Executing live E2E tests against API Gateway...'
                 sh '''
