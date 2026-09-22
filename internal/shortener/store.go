@@ -1,7 +1,5 @@
 package shortener
 
-// #region Store Operations
-
 import (
 	"context"
 	"encoding/json"
@@ -96,5 +94,3 @@ func (s *Server) setCached(ctx context.Context, record URLRecord) error {
 
 // cacheKey returns the Redis key for a numeric short URL.
 func cacheKey(shortURL int64) string { return "url:" + strconv.FormatInt(shortURL, 10) }
-
-// #endregion

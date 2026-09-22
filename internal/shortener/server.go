@@ -1,7 +1,5 @@
 package shortener
 
-// #region Server Lifecycle
-
 import (
 	"context"
 	"errors"
@@ -133,5 +131,3 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/urls/{shortURL}", s.lookup)
 	return mux
 }
-
-// #endregion
