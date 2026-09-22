@@ -1,6 +1,9 @@
 # #region Jenkins Service
 services:
   jenkins:
+    build:
+      context: .
+      dockerfile: Dockerfile.jenkins
     image: microservice-jenkins:local
     container_name: jenkins-server
     restart: unless-stopped
@@ -10,6 +13,7 @@ services:
       - jenkins_data:/var/jenkins_home
       - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
       - .:/workspace:ro
+      - C:/Users/boyce/.aws:/var/jenkins_home/.aws:ro
     environment:
       - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
 

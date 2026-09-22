@@ -58,6 +58,15 @@ pipeline {
 
         stage('Deploy Infrastructure') {
             steps {
+                echo '[Pipeline-Deploy] Synchronizing local state and variables...'
+                sh '''
+                    if [ -f /workspace/infra_tf/terraform.tfstate ]; then
+                        cp /workspace/infra_tf/terraform.tfstate infra_tf/terraform.tfstate
+                    fi
+                    if [ -f /workspace/infra_tf/terraform.tfvars ]; then
+                        cp /workspace/infra_tf/terraform.tfvars infra_tf/terraform.tfvars
+                    fi
+                '''
                 echo '[Pipeline-Deploy] Applying Terraform to AWS...'
                 sh 'terraform -chdir=infra_tf init -input=false'
                 sh 'terraform -chdir=infra_tf apply -auto-approve -input=false'
