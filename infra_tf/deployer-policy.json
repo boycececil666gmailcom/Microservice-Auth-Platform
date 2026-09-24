@@ -10,6 +10,7 @@
         "ec2:*InternetGateway*",
         "ec2:*RouteTable*",
         "ec2:*SecurityGroup*",
+        "ec2:*NetworkInterface*",
         "ec2:Describe*",
         "ec2:CreateTags",
         "ec2:DeleteTags"
@@ -111,6 +112,7 @@
         "iam:DetachRolePolicy",
         "iam:ListAttachedRolePolicies",
         "iam:ListRolePolicies",
+        "iam:ListInstanceProfilesForRole",
         "iam:TagRole",
         "iam:UntagRole"
       ],
