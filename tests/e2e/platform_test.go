@@ -26,15 +26,15 @@ func TestURLShortenerAndAnalyticsJourney(t *testing.T) {
 	create := request(t, client, http.MethodPost, baseURL+"/api/v1/shorten", map[string]string{"long_url": longURL}, "")
 	assertStatus(t, create, http.StatusCreated)
 	var created struct {
-		ShortURL int64  `json:"short_url"`
+		ShortURL string `json:"short_url"`
 		LongURL  string `json:"long_url"`
 	}
 	decode(t, create, &created)
-	if created.LongURL != longURL || created.ShortURL == 0 {
+	if created.LongURL != longURL || created.ShortURL == "" {
 		t.Fatalf("unexpected short URL response: %#v", created)
 	}
 
-	lookup := request(t, client, http.MethodGet, fmt.Sprintf("%s/api/v1/urls/%d", baseURL, created.ShortURL), nil, "")
+	lookup := request(t, client, http.MethodGet, fmt.Sprintf("%s/api/v1/urls/%s", baseURL, created.ShortURL), nil, "")
 	assertStatus(t, lookup, http.StatusOK)
 	var lookedUp struct {
 		LongURL string `json:"long_url"`
@@ -47,7 +47,7 @@ func TestURLShortenerAndAnalyticsJourney(t *testing.T) {
 	initialStats := getStats(t, client, baseURL)
 
 	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
-	redirect := request(t, client, http.MethodGet, fmt.Sprintf("%s/r/%d", baseURL, created.ShortURL), nil, "")
+	redirect := request(t, client, http.MethodGet, fmt.Sprintf("%s/r/%s", baseURL, created.ShortURL), nil, "")
 	assertStatus(t, redirect, http.StatusFound)
 	if location := redirect.Header.Get("Location"); location != longURL {
 		t.Fatalf("redirect location = %q, want %q", location, longURL)

@@ -1,21 +1,23 @@
-FROM jenkins/jenkins:lts-jdk17
+FROM golang:1.26.6-bookworm@sha256:116d58cbd88c1297624acc6e967a060012422bacf9930927e23fb719189c6f36 AS go-toolchain
+FROM hashicorp/terraform:1.15.7@sha256:40e61a86763083ea987ded0ffa15f6d75e0df48ed16275811f949b3ecbcd8aae AS terraform-toolchain
+FROM jenkins/jenkins:2.568.3-lts-jdk21@sha256:c1e4c349365f6d16d88595b2c5f7e8ff39b8ae1d061f62420bac193b4b9616d0
 
 USER root
 
-# #region Build Tooling Installation
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    golang-go \
+    build-essential \
+    git \
     zip \
-    curl \
-    gnupg \
-    software-properties-common \
-    && curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com bookworm main" | tee /etc/apt/sources.list.d/hashicorp.list \
-    && apt-get update && apt-get install -y terraform \
     && rm -rf /var/lib/apt/lists/*
 
-# Grant Jenkins access to host-mounted git directories
+COPY --from=go-toolchain /usr/local/go /usr/local/go
+COPY --from=terraform-toolchain /bin/terraform /usr/local/bin/terraform
+
+ENV PATH="/usr/local/go/bin:${PATH}"
+
 RUN git config --system --add safe.directory "*"
-# #endregion
+
+COPY jenkins/plugins.txt /usr/share/jenkins/ref/plugins.txt
+RUN jenkins-plugin-cli --plugin-file /usr/share/jenkins/ref/plugins.txt
 
 USER jenkins

@@ -1,14 +1,20 @@
 pipeline {
     agent any
 
+    parameters {
+        booleanParam(name: 'PLAN_INFRA', defaultValue: false, description: 'Create an AWS Terraform plan')
+        booleanParam(name: 'DEPLOY', defaultValue: false, description: 'Apply the reviewed Terraform plan')
+        choice(name: 'ENVIRONMENT', choices: ['dev', 'staging', 'prod'], description: 'Target environment')
+    }
+
     environment {
         CGO_ENABLED = '1'
+        TF_IN_AUTOMATION = 'true'
     }
 
     stages {
         stage('Code Quality') {
             steps {
-                echo '[Pipeline-Quality] Checking format and static analysis...'
                 sh 'test -z "$(gofmt -l cmd internal tests)"'
                 sh 'go vet ./...'
             }
@@ -16,32 +22,18 @@ pipeline {
 
         stage('Unit Tests') {
             steps {
-                echo '[Pipeline-Test] Running unit tests with race detector...'
                 sh 'go test -race -coverprofile=coverage.out ./...'
             }
         }
 
         stage('Build Lambda Packages') {
             steps {
-                echo '[Pipeline-Build] Compiling Shortener Lambda (arm64)...'
                 sh '''
                     mkdir -p bin
                     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/shortener
-                    if command -v zip >/dev/null 2>&1; then
-                        zip -q -j bin/shortener.zip bootstrap
-                    else
-                        python3 -m zipfile -c bin/shortener.zip bootstrap
-                    fi
-                    rm -f bootstrap
-                '''
-                echo '[Pipeline-Build] Compiling Analytics Lambda (arm64)...'
-                sh '''
+                    zip -q -j bin/shortener.zip bootstrap
                     CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/analytics
-                    if command -v zip >/dev/null 2>&1; then
-                        zip -q -j bin/analytics.zip bootstrap
-                    else
-                        python3 -m zipfile -c bin/analytics.zip bootstrap
-                    fi
+                    zip -q -j bin/analytics.zip bootstrap
                     rm -f bootstrap
                 '''
             }
@@ -49,37 +41,55 @@ pipeline {
 
         stage('Terraform Validation') {
             steps {
-                echo '[Pipeline-Terraform] Validating infrastructure configuration...'
                 sh 'terraform fmt -check -recursive infra_tf'
-                sh 'terraform -chdir=infra_tf init -backend=false -input=false'
+                sh 'terraform -chdir=infra_tf init -backend=false -reconfigure -input=false'
                 sh 'terraform -chdir=infra_tf validate'
             }
         }
 
-        stage('Deploy Infrastructure') {
+        stage('Terraform Plan') {
+            when {
+                expression { params.PLAN_INFRA || params.DEPLOY }
+            }
             steps {
-                echo '[Pipeline-Deploy] Synchronizing local state and variables...'
                 sh '''
-                    if [ -f /workspace/infra_tf/terraform.tfstate ]; then
-                        cp /workspace/infra_tf/terraform.tfstate infra_tf/terraform.tfstate
-                    fi
+                    test -f /workspace/infra_tf/backend.hcl
+                    cp /workspace/infra_tf/backend.hcl infra_tf/backend.hcl
                     if [ -f /workspace/infra_tf/terraform.tfvars ]; then
                         cp /workspace/infra_tf/terraform.tfvars infra_tf/terraform.tfvars
                     fi
+                    terraform -chdir=infra_tf init -reconfigure -input=false -backend-config=backend.hcl
+                    terraform -chdir=infra_tf plan -input=false -var="environment=${ENVIRONMENT}" -out=tfplan
                 '''
-                echo '[Pipeline-Deploy] Applying Terraform to AWS...'
-                sh 'terraform -chdir=infra_tf init -input=false'
-                sh 'terraform -chdir=infra_tf apply -auto-approve -input=false'
+            }
+        }
+
+        stage('Deployment Approval') {
+            when {
+                expression { params.DEPLOY }
+            }
+            steps {
+                input message: "Apply the reviewed ${params.ENVIRONMENT} plan?", ok: 'Deploy'
+            }
+        }
+
+        stage('Deploy Infrastructure') {
+            when {
+                expression { params.DEPLOY }
+            }
+            steps {
+                sh 'terraform -chdir=infra_tf apply -input=false tfplan'
             }
         }
 
         stage('Live E2E Tests') {
+            when {
+                expression { params.DEPLOY }
+            }
             steps {
-                echo '[Pipeline-E2E] Executing live E2E tests against API Gateway...'
                 sh '''
-                    ENDPOINT=$(terraform -chdir=infra_tf output -raw api_endpoint 2>/dev/null | tr -d '\r' | sed 's:/*$::' || true)
-                    export GATEWAY_URL="${ENDPOINT:-http://localhost:8000}"
-                    go test -tags=e2e -count=1 ./tests/e2e/ -v
+                    ENDPOINT=$(terraform -chdir=infra_tf output -raw api_endpoint | tr -d '\r' | sed 's:/*$::')
+                    GATEWAY_URL="$ENDPOINT" go test -tags=e2e -count=1 ./tests/e2e/ -v
                 '''
             }
         }
@@ -87,7 +97,7 @@ pipeline {
 
     post {
         always {
-            sh 'rm -rf bin'
+            archiveArtifacts artifacts: 'coverage.out,bin/*.zip', allowEmptyArchive: true, fingerprint: true
         }
     }
 }

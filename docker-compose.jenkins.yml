@@ -4,18 +4,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.jenkins
-    image: microservice-jenkins:local
-    container_name: jenkins-server
+    image: url-shortener-jenkins:local
+    container_name: url-shortener-jenkins
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - jenkins_data:/var/jenkins_home
       - ./jenkins/init.groovy.d:/var/jenkins_home/init.groovy.d:ro
       - .:/workspace:ro
-      - C:/Users/boyce/.aws:/var/jenkins_home/.aws:ro
+      - ${AWS_CONFIG_DIR:?Set AWS_CONFIG_DIR to your .aws directory}:/var/jenkins_home/.aws:ro
     environment:
-      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
+      - JAVA_OPTS=-Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
 
 volumes:
   jenkins_data:

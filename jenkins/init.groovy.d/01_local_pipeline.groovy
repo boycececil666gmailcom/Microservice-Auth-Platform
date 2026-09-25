@@ -7,7 +7,7 @@ import hudson.triggers.SCMTrigger
 
 // #region Local Pipeline Configuration
 def j = Jenkins.get()
-def jobName = "microservice-auth-platform"
+def jobName = "url-shortener"
 
 println("[Pipeline-Init] Configuring local pipeline job: " + jobName)
 def job = j.getItem(jobName)

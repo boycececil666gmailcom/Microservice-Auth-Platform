@@ -1,5 +1,9 @@
 # AWS Deployment Configuration
 aws_region         = "us-east-1"
+aws_profile        = "terraform-deployer"
 environment        = "dev"
 app_name           = "url-shortener"
 log_retention_days = 14
+api_throttle_rate  = 50
+api_throttle_burst = 100
+# alarm_topic_arn   = "arn:aws:sns:us-east-1:123456789012:operations"

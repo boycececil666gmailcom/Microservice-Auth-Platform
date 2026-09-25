@@ -2,147 +2,99 @@
   "Version": "2012-10-17",
   "Statement": [
     {
-      "Sid": "AllowVPCNetworking",
+      "Sid": "ManageProjectDynamoDBTables",
       "Effect": "Allow",
       "Action": [
-        "ec2:*Vpc*",
-        "ec2:*Subnet*",
-        "ec2:*InternetGateway*",
-        "ec2:*RouteTable*",
-        "ec2:*SecurityGroup*",
-        "ec2:*NetworkInterface*",
-        "ec2:Describe*",
-        "ec2:CreateTags",
-        "ec2:DeleteTags"
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:UpdateContinuousBackups",
+        "dynamodb:UpdateTable",
+        "dynamodb:UpdateTimeToLive"
       ],
+      "Resource": "arn:aws:dynamodb:*:*:table/url-shortener-*"
+    },
+    {
+      "Sid": "ManageProjectQueues",
+      "Effect": "Allow",
+      "Action": "sqs:*",
+      "Resource": "arn:aws:sqs:*:*:url-shortener-*"
+    },
+    {
+      "Sid": "ManageProjectFunctions",
+      "Effect": "Allow",
+      "Action": "lambda:*",
+      "Resource": "arn:aws:lambda:*:*:function:url-shortener-*"
+    },
+    {
+      "Sid": "ReadLambdaInventory",
+      "Effect": "Allow",
+      "Action": ["lambda:ListFunctions", "lambda:ListVersionsByFunction"],
       "Resource": "*"
     },
     {
-      "Sid": "AllowRDSPostgres",
+      "Sid": "ManageHTTPAPI",
       "Effect": "Allow",
-      "Action": [
-        "rds:*DBInstance*",
-        "rds:*DBSubnetGroup*",
-        "rds:ListTagsForResource",
-        "rds:AddTagsToResource",
-        "rds:RemoveTagsFromResource",
-        "rds:Describe*"
-      ],
-      "Resource": "*"
+      "Action": "apigateway:*",
+      "Resource": "arn:aws:apigateway:*::/apis*"
     },
     {
-      "Sid": "AllowElastiCacheRedis",
+      "Sid": "ManageProjectLogsAndAlarms",
       "Effect": "Allow",
       "Action": [
-        "elasticache:*CacheCluster*",
-        "elasticache:*CacheSubnetGroup*",
-        "elasticache:ListTagsForResource",
-        "elasticache:AddTagsToResource",
-        "elasticache:RemoveTagsFromResource",
-        "elasticache:Describe*"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "AllowSQSMessaging",
-      "Effect": "Allow",
-      "Action": [
-        "sqs:*Queue*",
-        "sqs:GetQueueAttributes",
-        "sqs:SetQueueAttributes",
-        "sqs:TagQueue",
-        "sqs:UntagQueue",
-        "sqs:ListQueues",
-        "sqs:ListQueueTags"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "AllowLambdaAndAPIGateway",
-      "Effect": "Allow",
-      "Action": [
-        "lambda:*",
-        "apigateway:*",
         "logs:CreateLogGroup",
         "logs:DeleteLogGroup",
         "logs:DescribeLogGroups",
-        "logs:PutRetentionPolicy",
-        "logs:CreateLogDelivery",
-        "logs:GetLogDelivery",
-        "logs:UpdateLogDelivery",
-        "logs:DeleteLogDelivery",
-        "logs:ListLogDeliveries",
-        "logs:PutResourcePolicy",
-        "logs:DescribeResourcePolicies",
         "logs:ListTagsForResource",
+        "logs:PutRetentionPolicy",
         "logs:TagResource",
         "logs:UntagResource",
-        "logs:FilterLogEvents",
-        "logs:GetLogEvents",
-        "logs:DescribeLogStreams"
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:TagResource",
+        "cloudwatch:UntagResource"
       ],
       "Resource": "*"
     },
     {
-      "Sid": "AllowAppRegistryAndResourceGroups",
+      "Sid": "ManageApplicationGroup",
       "Effect": "Allow",
-      "Action": [
-        "servicecatalog:*",
-        "servicecatalog-appregistry:*",
-        "resource-groups:*",
-        "tag:GetResources",
-        "tag:GetTagKeys",
-        "tag:GetTagValues",
-        "tag:TagResources",
-        "tag:UntagResources"
-      ],
+      "Action": ["resource-groups:*", "tag:GetResources", "tag:GetTagKeys", "tag:GetTagValues"],
       "Resource": "*"
     },
     {
-      "Sid": "AllowScopedIAMRoleCreation",
+      "Sid": "ManageProjectRoles",
       "Effect": "Allow",
       "Action": [
+        "iam:AttachRolePolicy",
         "iam:CreateRole",
         "iam:DeleteRole",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy",
         "iam:GetRole",
         "iam:GetRolePolicy",
-        "iam:PutRolePolicy",
-        "iam:DeleteRolePolicy",
-        "iam:AttachRolePolicy",
-        "iam:DetachRolePolicy",
         "iam:ListAttachedRolePolicies",
-        "iam:ListRolePolicies",
         "iam:ListInstanceProfilesForRole",
+        "iam:ListRolePolicies",
+        "iam:PutRolePolicy",
         "iam:TagRole",
         "iam:UntagRole"
       ],
       "Resource": "arn:aws:iam::*:role/url-shortener-*"
     },
     {
-      "Sid": "AllowServiceLinkedRoles",
-      "Effect": "Allow",
-      "Action": "iam:CreateServiceLinkedRole",
-      "Resource": "arn:aws:iam::*:role/aws-service-role/*"
-    },
-    {
-      "Sid": "AllowIAMPolicyInspection",
-      "Effect": "Allow",
-      "Action": [
-        "iam:GetPolicy",
-        "iam:GetPolicyVersion",
-        "iam:ListPolicies"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Sid": "AllowPassRoleToLambda",
+      "Sid": "PassProjectRolesToLambda",
       "Effect": "Allow",
       "Action": "iam:PassRole",
       "Resource": "arn:aws:iam::*:role/url-shortener-*",
       "Condition": {
-        "StringEquals": {
-          "iam:PassedToService": "lambda.amazonaws.com"
-        }
+        "StringEquals": {"iam:PassedToService": "lambda.amazonaws.com"}
       }
     }
   ]

@@ -2,95 +2,120 @@ package shortener
 
 import (
 	"context"
-	"encoding/json"
+	"crypto/sha256"
+	"encoding/base64"
 	"errors"
-	"log/slog"
-	"net/http"
-	"strconv"
+	"fmt"
+	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/redis/go-redis/v9"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
-// resolve validates a short identifier and loads its URL record.
-//
-// A positive base-10 integer is required. Redis is checked first; cache misses,
-// malformed entries, and Redis failures fall back to PostgreSQL. A successful
-// database lookup is written back to the cache on a best-effort basis.
-//
-// On success, status is zero. On failure, status is the HTTP status the caller
-// should send: 422 for an invalid identifier, 404 for a missing row, or 500 for
-// another database failure. The accompanying error is intended for control flow
-// and logging, not direct disclosure to clients.
-func (s *Server) resolve(ctx context.Context, value string) (URLRecord, int, error) {
-	shortURL, err := strconv.ParseInt(value, 10, 64)
-	if err != nil || shortURL <= 0 {
-		return URLRecord{}, http.StatusUnprocessableEntity, errors.New("invalid short URL")
-	}
-	record, err := s.getCached(ctx, shortURL)
-	if err == nil {
-		return record, 0, nil
-	}
-	if !errors.Is(err, redis.Nil) {
-		slog.Warn("[Shortener-resolve] URL cache lookup failed; using PostgreSQL", "error", err)
-	}
-	record, err = s.getByID(ctx, shortURL)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return URLRecord{}, http.StatusNotFound, err
-	}
-	if err != nil {
-		return URLRecord{}, http.StatusInternalServerError, err
-	}
-	if err := s.setCached(ctx, record); err != nil {
-		slog.Warn("[Shortener-resolve] URL cache warm failed", "error", err)
-	}
-	return record, 0, nil
+var ErrNotFound = errors.New("short URL not found")
+
+type URLRecord struct {
+	ShortURL  string    `dynamodbav:"short_url" json:"short_url"`
+	LongURL   string    `dynamodbav:"long_url" json:"long_url"`
+	CreatedAt time.Time `dynamodbav:"created_at" json:"created_at"`
 }
 
-// getByLongURL loads a URL record from PostgreSQL by its destination URL.
-func (s *Server) getByLongURL(ctx context.Context, longURL string) (URLRecord, error) {
-	var record URLRecord
-	err := s.db.QueryRow(ctx,
-		"SELECT short_url, long_url, created_at FROM urls WHERE long_url = $1", longURL,
-	).Scan(&record.ShortURL, &record.LongURL, &record.CreatedAt)
-	return record, err
+type dynamoAPI interface {
+	DescribeTable(context.Context, *dynamodb.DescribeTableInput, ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error)
+	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 }
 
-// getByID loads a URL record from PostgreSQL by its numeric short URL.
-func (s *Server) getByID(ctx context.Context, shortURL int64) (URLRecord, error) {
-	var record URLRecord
-	err := s.db.QueryRow(ctx,
-		"SELECT short_url, long_url, created_at FROM urls WHERE short_url = $1", shortURL,
-	).Scan(&record.ShortURL, &record.LongURL, &record.CreatedAt)
-	return record, err
+type dynamoStore struct {
+	client dynamoAPI
+	table  string
 }
 
-// getCached loads and decodes a URL record from Redis.
-//
-// redis.Nil is returned unchanged so callers can distinguish a cache miss. If a
-// cached value is not valid URLRecord JSON, the corrupt entry is deleted on a
-// best-effort basis and the decoding error is returned.
-func (s *Server) getCached(ctx context.Context, shortURL int64) (URLRecord, error) {
-	raw, err := s.redis.Get(ctx, cacheKey(shortURL)).Bytes()
+func newDynamoStore(client dynamoAPI, table string) *dynamoStore {
+	return &dynamoStore{client: client, table: table}
+}
+
+func (s *dynamoStore) Create(ctx context.Context, longURL string) (URLRecord, error) {
+	createdAt := time.Now().UTC().Truncate(time.Millisecond)
+	for _, length := range []int{16, 22, 32, 43} {
+		record := URLRecord{ShortURL: shortCode(longURL, length), LongURL: longURL, CreatedAt: createdAt}
+		item, err := attributevalue.MarshalMap(record)
+		if err != nil {
+			return URLRecord{}, err
+		}
+		_, err = s.client.PutItem(ctx, &dynamodb.PutItemInput{
+			TableName:           aws.String(s.table),
+			Item:                item,
+			ConditionExpression: aws.String("attribute_not_exists(short_url)"),
+		})
+		if err == nil {
+			return record, nil
+		}
+		var conditional *types.ConditionalCheckFailedException
+		if !errors.As(err, &conditional) {
+			return URLRecord{}, err
+		}
+		existing, getErr := s.Get(ctx, record.ShortURL)
+		if getErr != nil {
+			return URLRecord{}, getErr
+		}
+		if existing.LongURL == longURL {
+			return existing, nil
+		}
+	}
+	return URLRecord{}, errors.New("unable to allocate a collision-free short URL")
+}
+
+func (s *dynamoStore) Get(ctx context.Context, shortURL string) (URLRecord, error) {
+	if !validShortURL(shortURL) {
+		return URLRecord{}, fmt.Errorf("invalid short URL: %q", shortURL)
+	}
+	output, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      aws.String(s.table),
+		ConsistentRead: aws.Bool(true),
+		Key: map[string]types.AttributeValue{
+			"short_url": &types.AttributeValueMemberS{Value: shortURL},
+		},
+	})
 	if err != nil {
 		return URLRecord{}, err
 	}
+	if len(output.Item) == 0 {
+		return URLRecord{}, ErrNotFound
+	}
 	var record URLRecord
-	if err := json.Unmarshal(raw, &record); err != nil {
-		_ = s.redis.Del(ctx, cacheKey(shortURL)).Err()
+	if err := attributevalue.UnmarshalMap(output.Item, &record); err != nil {
 		return URLRecord{}, err
 	}
 	return record, nil
 }
 
-// setCached encodes a URL record and stores it in Redis for the configured TTL.
-func (s *Server) setCached(ctx context.Context, record URLRecord) error {
-	payload, err := json.Marshal(record)
-	if err != nil {
-		return err
-	}
-	return s.redis.Set(ctx, cacheKey(record.ShortURL), payload, s.config.CacheTTL).Err()
+func (s *dynamoStore) Ready(ctx context.Context) error {
+	_, err := s.client.DescribeTable(ctx, &dynamodb.DescribeTableInput{TableName: aws.String(s.table)})
+	return err
 }
 
-// cacheKey returns the Redis key for a numeric short URL.
-func cacheKey(shortURL int64) string { return "url:" + strconv.FormatInt(shortURL, 10) }
+func shortCode(longURL string, length int) string {
+	digest := sha256.Sum256([]byte(longURL))
+	encoded := base64.RawURLEncoding.EncodeToString(digest[:])
+	if length > len(encoded) {
+		length = len(encoded)
+	}
+	return encoded[:length]
+}
+
+func validShortURL(value string) bool {
+	if len(value) < 16 || len(value) > 43 {
+		return false
+	}
+	for _, character := range value {
+		if !((character >= 'a' && character <= 'z') ||
+			(character >= 'A' && character <= 'Z') ||
+			(character >= '0' && character <= '9') || character == '-' || character == '_') {
+			return false
+		}
+	}
+	return true
+}

@@ -9,6 +9,11 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  default_route_settings {
+    throttling_burst_limit = var.api_throttle_burst
+    throttling_rate_limit  = var.api_throttle_rate
+  }
+
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.api_gw.arn
     format = jsonencode({
@@ -83,11 +88,6 @@ resource "aws_apigatewayv2_route" "stats_v1" {
   target    = "integrations/${aws_apigatewayv2_integration.analytics.id}"
 }
 
-resource "aws_apigatewayv2_route" "stats" {
-  api_id    = aws_apigatewayv2_api.http_api.id
-  route_key = "GET /stats"
-  target    = "integrations/${aws_apigatewayv2_integration.analytics.id}"
-}
 #endregion
 
 #region Gateway Permissions

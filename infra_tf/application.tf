@@ -8,8 +8,8 @@ resource "aws_resourcegroups_group" "application" {
       ResourceTypeFilters = ["AWS::AllSupported"]
       TagFilters = [
         {
-          Key    = "awsApplication"
-          Values = ["arn:aws:resource-groups:${var.aws_region}:${var.aws_account_id}:group/${var.app_name}-${var.environment}"]
+          Key    = "Application"
+          Values = ["${var.app_name}-${var.environment}"]
         }
       ]
     })
