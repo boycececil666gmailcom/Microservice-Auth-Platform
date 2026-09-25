@@ -189,7 +189,6 @@ Microservice-Auth-Platform/
 ├── internal/         # Go service implementations and unit tests
 │   ├── analytics/    # Kafka consumer and in-memory counters
 │   ├── auth/         # JWT, OIDC, bcrypt, PostgreSQL, and Redis
-│   ├── httpjson/     # Shared JSON HTTP helpers
 │   └── shortener/    # PostgreSQL, Redis cache, redirects, and Kafka producer
 ├── services/         # Multi-stage Dockerfiles for the three Go binaries
 ├── infra_tf/         # Kubernetes infrastructure as Terraform

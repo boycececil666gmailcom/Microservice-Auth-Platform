@@ -4,13 +4,13 @@ package analytics
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"os"
 	"strconv"
 	"sync"
 	"time"
 
-	"github.com/boycececil666gmailcom/Microservice-Auth-Platform/internal/httpjson"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -78,18 +78,18 @@ func (s *Server) Close() error {
 
 // health reports that the analytics process is running.
 func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
-	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ready reports that the analytics service is ready.
 func (s *Server) ready(w http.ResponseWriter, r *http.Request) {
 	if s.redis != nil {
 		if err := s.redis.Ping(r.Context()).Err(); err != nil {
-			httpjson.Error(w, http.StatusServiceUnavailable, "Cache unavailable")
+			errorJSON(w, http.StatusServiceUnavailable, "Cache unavailable")
 			return
 		}
 	}
-	httpjson.Write(w, http.StatusOK, map[string]string{"status": "ready"})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})
 }
 
 // RecordRedirect increments redirect counters in Redis and in-memory.
@@ -137,7 +137,7 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		httpjson.Write(w, http.StatusOK, Stats{
+		writeJSON(w, http.StatusOK, Stats{
 			TotalRedirects:      total,
 			RedirectsByShortURL: byShortURL,
 		})
@@ -150,10 +150,20 @@ func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	for k, v := range s.stats.RedirectsByShortURL {
 		copyMap[k] = v
 	}
-	httpjson.Write(w, http.StatusOK, Stats{
+	writeJSON(w, http.StatusOK, Stats{
 		TotalRedirects:      s.stats.TotalRedirects,
 		RedirectsByShortURL: copyMap,
 	})
+}
+
+func writeJSON(w http.ResponseWriter, status int, value any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(value)
+}
+
+func errorJSON(w http.ResponseWriter, status int, detail string) {
+	writeJSON(w, status, map[string]string{"detail": detail})
 }
 
 // #endregion
